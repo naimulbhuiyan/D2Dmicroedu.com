@@ -1,0 +1,25 @@
+# D2D microedu.com — Cloudflare Workers configuration
+# Deploy guide: docs/CLOUDFLARE.md
+#
+# Before deploying, replace database_id below with the real ID of the
+# D1 database "d2d-microedu-db" (Cloudflare dashboard > Workers & Pages >
+# D1, or the value shown when the database is created).
+# If you import this repo from the Cloudflare dashboard instead of using
+# Wrangler, you can also add the D1 binding there: Worker > Settings >
+# Bindings > Add > D1 database, variable name "DB", database
+# "d2d-microedu-db" — the Worker only needs env.DB + env.ASSETS.
+
+name = "d2d-microedu"
+main = "cloudflare/worker.js"
+compatibility_date = "2025-01-01"
+workers_dev = true
+
+# Static frontend: everything in ./public is served by the Worker
+# through the env.ASSETS binding for non-/api/ requests.
+[assets]
+directory = "./public"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "d2d-microedu-db"
+database_id = "REPLACE_AFTER_CREATING_D1_DATABASE"

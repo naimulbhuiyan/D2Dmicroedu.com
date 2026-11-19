@@ -60,3 +60,6 @@ at PostgreSQL (or use the VPS/Docker deployment with a managed Postgres on Rende
 
 ## Deployment
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — Render/Railway deploy directly from this GitHub repo; VPS uses the Dockerfile or pm2. Point your domain (e.g. d2dmicroedu.com) at the chosen host.
+
+## Cloudflare (free, no card)
+The same API also runs on Cloudflare Workers + D1 (relational SQLite database, free tier, no payment card): the Worker is `cloudflare/worker.js`, the D1 schema is `cloudflare/schema-d1.sql`, and configuration is in `wrangler.toml`. Step-by-step setup: [docs/CLOUDFLARE.md](docs/CLOUDFLARE.md).
