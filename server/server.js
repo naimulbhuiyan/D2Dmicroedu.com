@@ -1,0 +1,153 @@
+'use strict';
+/* D2D microedu.com — zero-dependency server (Node built-ins only)
+   Local/dev DB: node:sqlite in server/data/app.db (mirrors database/schema.sql for PostgreSQL prod) */
+const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const { DatabaseSync } = require('node:sqlite');
+
+const PORT = process.env.PORT || 3000;
+const DATA_DIR = path.join(__dirname, 'data');
+fs.mkdirSync(DATA_DIR, { recursive: true });
+const db = new DatabaseSync(path.join(DATA_DIR, 'app.db'));
+db.exec(`
+CREATE TABLE IF NOT EXISTS registered_people(id INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT NOT NULL CHECK(role IN ('Teacher','Student','Other')), name TEXT NOT NULL, email TEXT NOT NULL UNIQUE, phone TEXT, mobile TEXT, password_hash TEXT NOT NULL, picture TEXT, created_at TEXT DEFAULT (datetime('now')));
+CREATE INDEX IF NOT EXISTS idx_people_role ON registered_people(role);
+CREATE TABLE IF NOT EXISTS cv_details(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL UNIQUE REFERENCES registered_people(id) ON DELETE CASCADE, education TEXT NOT NULL, university TEXT NOT NULL, profession TEXT NOT NULL, position TEXT, experience TEXT NOT NULL, speciality TEXT NOT NULL, subjects TEXT NOT NULL, level TEXT NOT NULL, address TEXT NOT NULL, available_time TEXT, rate_bdt_per_hour REAL NOT NULL DEFAULT 500, cv_file_name TEXT);
+CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, person_id INTEGER NOT NULL REFERENCES registered_people(id) ON DELETE CASCADE, created_at TEXT DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS subscriptions(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL REFERENCES registered_people(id) ON DELETE CASCADE, plan TEXT NOT NULL, months INTEGER NOT NULL, amount_bdt REAL NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'Pending', created_at TEXT DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS tuition_requests(id INTEGER PRIMARY KEY AUTOINCREMENT, gid TEXT NOT NULL UNIQUE, student_id INTEGER NOT NULL REFERENCES registered_people(id), teacher_id INTEGER NOT NULL REFERENCES registered_people(id), level TEXT, subject TEXT NOT NULL, chapter TEXT, topic TEXT NOT NULL, hours REAL NOT NULL DEFAULT 1, rate_bdt_per_hour REAL NOT NULL DEFAULT 500, amount_bdt REAL NOT NULL, available_time TEXT, status TEXT NOT NULL DEFAULT 'Pending', class_link TEXT, created_at TEXT DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS payments(id INTEGER PRIMARY KEY AUTOINCREMENT, gid TEXT NOT NULL, person_id INTEGER NOT NULL, amount_bdt REAL NOT NULL, method TEXT DEFAULT 'bKash', status TEXT NOT NULL DEFAULT 'Pending', created_at TEXT DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS wallet_entries(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, gid TEXT, topic TEXT, amount_bdt REAL NOT NULL, kind TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS feedback_evaluation(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, gid TEXT, comment TEXT, ranking INTEGER, complain TEXT, created_at TEXT DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS chat_messages(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER, gid TEXT, sender TEXT, message TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')));
+`);
+
+const hashPw = pw => { const s = crypto.randomBytes(16).toString('hex'); return s + ':' + crypto.scryptSync(pw, s, 64).toString('hex'); };
+const verifyPw = (pw, stored) => { try { const [s, h] = stored.split(':'); return crypto.timingSafeEqual(Buffer.from(h, 'hex'), crypto.scryptSync(pw, s, 64)); } catch { return false; } };
+const gid = () => [1000,100,100].map((m,i)=> Math.floor(Math.random()*9000*(i?0.111:1)) + (i?100:1000)).join('-').replace(/(\d{4})-(\d{3})-(\d{3})/,'$1-$2-$3');
+const newGid = () => { let g; do { g = `${1000+Math.floor(Math.random()*9000)}-${100+Math.floor(Math.random()*900)}-${100+Math.floor(Math.random()*900)}`; } while (db.prepare('SELECT 1 FROM tuition_requests WHERE gid=?').get(g)); return g; };
+const PLANS = { Teacher: { 'Teacher Basic': 300, 'Teacher Plus': 500 }, Student: { 'Student Basic': 200, 'Student Plus': 300 }, Other: { 'Other Basic': 200, 'Other Plus': 300 } };
+
+function send(res, code, obj) { const b = JSON.stringify(obj); res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(b); }
+function body(req) { return new Promise(r => { let d=''; req.on('data',c=>d+=c); req.on('end',()=>{ try{r(JSON.parse(d||'{}'))}catch{r({})} }); }); }
+function auth(req) { const t = (req.headers.authorization||'').replace('Bearer ',''); if(!t) return null; const s = db.prepare('SELECT person_id FROM sessions WHERE token=?').get(t); return s ? db.prepare('SELECT * FROM registered_people WHERE id=?').get(s.person_id) : null; }
+const pub = p => p && ({ id:p.id, role:p.role, name:p.name, email:p.email, phone:p.phone, mobile:p.mobile, picture:p.picture, created_at:p.created_at });
+const cvOf = id => db.prepare('SELECT * FROM cv_details WHERE person_id=?').get(id);
+const walletBalance = id => { const r = db.prepare('SELECT COALESCE(SUM(amount_bdt),0) t FROM wallet_entries WHERE person_id=?').get(id); return r.t; };
+
+const routes = {
+  'POST /api/register': async (req,res) => {
+    const b = await body(req);
+    const reqFields = ['role','name','email','password'];
+    const cvReq = ['education','university','profession','experience','speciality','subjects','level','address'];
+    if (!['Teacher','Student','Other'].includes(b.role)) return send(res,400,{error:'Select role: Teacher, Student or Other'});
+    for (const f of reqFields) if (!b[f]) return send(res,400,{error:'Missing field: '+f});
+    for (const f of cvReq) if (!b.cv || !b.cv[f]) return send(res,400,{error:'Detailed CV is mandatory. Missing CV field: '+f});
+    if (db.prepare('SELECT 1 FROM registered_people WHERE email=?').get(b.email)) return send(res,409,{error:'Email already registered'});
+    const info = db.prepare('INSERT INTO registered_people(role,name,email,phone,mobile,password_hash,picture) VALUES(?,?,?,?,?,?,?)')
+      .run(b.role,b.name,b.email,b.phone||null,b.mobile||null,hashPw(b.password),b.picture||null);
+    const pid = Number(info.lastInsertRowid);
+    db.prepare('INSERT INTO cv_details(person_id,education,university,profession,position,experience,speciality,subjects,level,address,available_time,rate_bdt_per_hour,cv_file_name) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      .run(pid,b.cv.education,b.cv.university,b.cv.profession,b.cv.position||null,b.cv.experience,b.cv.speciality,b.cv.subjects,b.cv.level,b.cv.address,b.cv.available_time||null,Number(b.cv.rate_bdt_per_hour)||500,b.cv.cv_file_name||null);
+    const token = crypto.randomBytes(24).toString('hex');
+    db.prepare('INSERT INTO sessions(token,person_id) VALUES(?,?)').run(token,pid);
+    send(res,201,{person:pub(db.prepare('SELECT * FROM registered_people WHERE id=?').get(pid)), cv:cvOf(pid), token});
+  },
+  'POST /api/signin': async (req,res) => {
+    const b = await body(req);
+    const p = db.prepare('SELECT * FROM registered_people WHERE email=?').get(b.email||'');
+    if (!p || !verifyPw(b.password||'', p.password_hash)) return send(res,401,{found:false,error:'Invalid email or password'});
+    const token = crypto.randomBytes(24).toString('hex');
+    db.prepare('INSERT INTO sessions(token,person_id) VALUES(?,?)').run(token,p.id);
+    send(res,200,{found:true, person:pub(p), cv:cvOf(p.id), token});
+  },
+  'GET /api/people': (req,res) => {
+    const people = db.prepare('SELECT * FROM registered_people ORDER BY id').all().map(p => ({...pub(p), cv:cvOf(p.id), subscription: db.prepare("SELECT * FROM subscriptions WHERE person_id=? ORDER BY id DESC LIMIT 1").get(p.id)||null }));
+    const counts = {}; for (const r of ['Teacher','Student','Other']) counts[r]=db.prepare('SELECT COUNT(*) c FROM registered_people WHERE role=?').get(r).c;
+    send(res,200,{counts, total:people.length, people});
+  },
+  'GET /api/teachers': (req,res) => {
+    const teachers = db.prepare("SELECT * FROM registered_people WHERE role='Teacher' ORDER BY id").all().map(p => ({...pub(p), cv:cvOf(p.id)}));
+    send(res,200,{teachers});
+  },
+  'POST /api/subscriptions': async (req,res) => {
+    const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
+    const b = await body(req);
+    const months = [1,3,6,12].includes(Number(b.months)) ? Number(b.months) : 1;
+    const plans = PLANS[me.role]||PLANS.Other; const plan = plans[b.plan]!==undefined ? b.plan : Object.keys(plans)[0];
+    const amount = plans[plan]*months;
+    const info = db.prepare('INSERT INTO subscriptions(person_id,plan,months,amount_bdt,status) VALUES(?,?,?,?,\'Pending\')').run(me.id,plan,months,amount);
+    send(res,201,{subscription: db.prepare('SELECT * FROM subscriptions WHERE id=?').get(Number(info.lastInsertRowid))});
+  },
+  'POST /api/subscriptions/confirm': async (req,res) => {
+    const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
+    const b = await body(req);
+    db.prepare("UPDATE subscriptions SET status='Confirm' WHERE id=? AND person_id=?").run(b.id,me.id);
+    send(res,200,{subscription: db.prepare('SELECT * FROM subscriptions WHERE id=?').get(b.id)});
+  },
+  'POST /api/requests': async (req,res) => {
+    const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
+    const b = await body(req);
+    if (!b.teacher_id || !b.subject || !b.topic) return send(res,400,{error:'teacher_id, subject and topic are required'});
+    const t = db.prepare("SELECT * FROM registered_people WHERE id=? AND role='Teacher'").get(b.teacher_id);
+    if (!t) return send(res,404,{error:'Teacher not found'});
+    const cv = cvOf(t.id); const rate = cv ? Number(cv.rate_bdt_per_hour)||500 : 500;
+    const hours = Number(b.hours)||1; const amount = hours*rate; const g = newGid();
+    const link = 'https://meet.google.com/' + g;
+    const info = db.prepare('INSERT INTO tuition_requests(gid,student_id,teacher_id,level,subject,chapter,topic,hours,rate_bdt_per_hour,amount_bdt,available_time,status,class_link) VALUES(?,?,?,?,?,?,?,?,?,?,?,\'Pending\',?)')
+      .run(g,me.id,t.id,b.level||null,b.subject,b.chapter||null,b.topic,hours,rate,amount,b.available_time||null,link);
+    db.prepare('INSERT INTO payments(gid,person_id,amount_bdt,status) VALUES(?,?,?,\'Pending\')').run(g,me.id,amount);
+    send(res,201,{request: db.prepare('SELECT * FROM tuition_requests WHERE id=?').get(Number(info.lastInsertRowid))});
+  },
+  'POST /api/payments/confirm': async (req,res) => {
+    const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
+    const b = await body(req);
+    const r = db.prepare('SELECT * FROM tuition_requests WHERE gid=?').get(b.gid||'');
+    if (!r) return send(res,404,{error:'Request not found'});
+    const next = b.status || 'Confirm';
+    if (!['Confirm','Ongoing','Done'].includes(next)) return send(res,400,{error:'status must be Confirm, Ongoing or Done'});
+    db.prepare('UPDATE tuition_requests SET status=? WHERE gid=?').run(next,r.gid);
+    if (next==='Confirm') db.prepare("UPDATE payments SET status='Confirm' WHERE gid=?").run(r.gid);
+    if (next==='Done') {
+      const exists = db.prepare("SELECT 1 FROM wallet_entries WHERE gid=? AND kind='credit'").get(r.gid);
+      if (!exists) db.prepare("INSERT INTO wallet_entries(person_id,gid,topic,amount_bdt,kind) VALUES(?,?,?,?,'credit')").run(r.teacher_id,r.gid,r.topic,r.amount_bdt);
+    }
+    send(res,200,{request: db.prepare('SELECT * FROM tuition_requests WHERE gid=?').get(r.gid)});
+  },
+  'GET /api/wallet': (req,res) => {
+    const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
+    send(res,200,{balance: walletBalance(me.id), entries: db.prepare('SELECT * FROM wallet_entries WHERE person_id=? ORDER BY id DESC').all(me.id)});
+  },
+  'POST /api/wallet/withdraw': async (req,res) => {
+    const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
+    const b = await body(req); const amt = Number(b.amount)||0;
+    if (amt<=0) return send(res,400,{error:'Amount must be positive'});
+    if (amt > walletBalance(me.id)) return send(res,400,{error:'Insufficient wallet balance'});
+    db.prepare("INSERT INTO wallet_entries(person_id,gid,topic,amount_bdt,kind) VALUES(?,NULL,'Withdraw',?,'withdraw')").run(me.id,-amt);
+    send(res,200,{balance: walletBalance(me.id)});
+  },
+  'POST /api/feedback': async (req,res) => {
+    const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
+    const b = await body(req);
+    const info = db.prepare('INSERT INTO feedback_evaluation(person_id,gid,comment,ranking,complain) VALUES(?,?,?,?,?)').run(me.id,b.gid||null,b.comment||null,b.ranking?Number(b.ranking):null,b.complain||null);
+    send(res,201,{feedback: db.prepare('SELECT * FROM feedback_evaluation WHERE id=?').get(Number(info.lastInsertRowid))});
+  },
+  'GET /api/my-requests': (req,res) => {
+    const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
+    send(res,200,{asStudent: db.prepare('SELECT * FROM tuition_requests WHERE student_id=? ORDER BY id DESC').all(me.id), asTeacher: db.prepare('SELECT * FROM tuition_requests WHERE teacher_id=? ORDER BY id DESC').all(me.id)});
+  },
+};
+
+const MIME = {'.html':'text/html','.css':'text/css','.js':'text/javascript','.png':'image/png','.svg':'image/svg+xml'};
+const server = http.createServer(async (req,res) => {
+  const url = new URL(req.url, 'http://localhost');
+  const key = req.method + ' ' + url.pathname;
+  if (routes[key]) { try { await routes[key](req,res,url); } catch(e){ send(res,500,{error:e.message}); } return; }
+  if (url.pathname.startsWith('/api/')) return send(res,404,{error:'Not found'});
+  let file = url.pathname === '/' ? '/index.html' : url.pathname;
+  const fp = path.join(__dirname,'..','public', path.normalize(file).replace(/^(\.\.[\/\\])+/,''));
+  fs.readFile(fp,(err,data)=>{ if(err){res.writeHead(404);return res.end('Not found');} res.writeHead(200,{'Content-Type':MIME[path.extname(fp)]||'application/octet-stream'}); res.end(data); });
+});
+server.listen(PORT, () => console.log(`D2D microedu.com running at http://localhost:${PORT}`));
