@@ -21,7 +21,15 @@ Configuration lives in `wrangler.toml` at the repo root
 2. **Create database** → name it exactly `d2d-microedu-db` → Create.
 3. Copy its **Database ID** — you need it in Step 5.
 
-## Step 3 — Create the tables
+## Step 3 — Create the tables (OPTIONAL)
+The Worker initialises its own database, so this step is **optional**:
+after deploying (Steps 4–5), open `<live URL>/api/init-db` once — or simply
+make any first API call (e.g. open `<live URL>/api/people`) — and the Worker
+creates all tables automatically (`POST`/`GET /api/init-db` and the lazy
+auto-init both run the embedded schema; it is idempotent and only creates
+empty tables).
+
+Manual alternative — create the tables yourself in the D1 Console:
 1. Open the new database → **Console** tab.
 2. Paste the whole contents of `cloudflare/schema-d1.sql` and run it.
    (Or locally: `npx wrangler d1 execute d2d-microedu-db --remote --file=cloudflare/schema-d1.sql`)

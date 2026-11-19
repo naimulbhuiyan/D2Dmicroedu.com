@@ -13,6 +13,135 @@ const PLANS = {
   Other: { 'Other Basic': 200, 'Other Plus': 300 },
 };
 
+/* ---------- database schema (embedded copy of cloudflare/schema-d1.sql) ----------
+   Lets the Worker initialise its own D1 database (see /api/init-db and the
+   lazy auto-init in fetch), so deployment does not depend on pasting SQL
+   into the D1 Console. All statements are IF NOT EXISTS — idempotent. */
+
+const SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS registered_people (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  role TEXT NOT NULL CHECK (role IN ('Teacher','Student','Other')),
+  name TEXT NOT NULL,
+  email TEXT NOT NULL UNIQUE,
+  phone TEXT, mobile TEXT,
+  password_hash TEXT NOT NULL,
+  picture TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_people_role ON registered_people(role);
+CREATE INDEX IF NOT EXISTS idx_people_email ON registered_people(email);
+CREATE TABLE IF NOT EXISTS cv_details (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  person_id INTEGER NOT NULL UNIQUE REFERENCES registered_people(id) ON DELETE CASCADE,
+  education TEXT NOT NULL, university TEXT NOT NULL,
+  profession TEXT NOT NULL, position TEXT,
+  experience TEXT NOT NULL, speciality TEXT NOT NULL,
+  subjects TEXT NOT NULL, level TEXT NOT NULL,
+  address TEXT NOT NULL, available_time TEXT,
+  rate_bdt_per_hour REAL NOT NULL DEFAULT 500,
+  cv_file_name TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_cv_person ON cv_details(person_id);
+CREATE TABLE IF NOT EXISTS sessions (
+  token TEXT PRIMARY KEY,
+  person_id INTEGER NOT NULL REFERENCES registered_people(id) ON DELETE CASCADE,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_person ON sessions(person_id);
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  person_id INTEGER NOT NULL REFERENCES registered_people(id) ON DELETE CASCADE,
+  plan TEXT NOT NULL,
+  months INTEGER NOT NULL CHECK (months IN (1,3,6,12)),
+  amount_bdt REAL NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending','Confirm')),
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_subs_person ON subscriptions(person_id);
+CREATE TABLE IF NOT EXISTS tuition_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  gid TEXT NOT NULL UNIQUE,
+  student_id INTEGER NOT NULL REFERENCES registered_people(id) ON DELETE CASCADE,
+  teacher_id INTEGER NOT NULL REFERENCES registered_people(id) ON DELETE CASCADE,
+  level TEXT, subject TEXT NOT NULL, chapter TEXT, topic TEXT NOT NULL,
+  hours REAL NOT NULL DEFAULT 1,
+  rate_bdt_per_hour REAL NOT NULL DEFAULT 500,
+  amount_bdt REAL NOT NULL,
+  available_time TEXT,
+  status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending','Confirm','Ongoing','Done','Cancelled')),
+  class_link TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_req_student ON tuition_requests(student_id);
+CREATE INDEX IF NOT EXISTS idx_req_teacher ON tuition_requests(teacher_id);
+CREATE INDEX IF NOT EXISTS idx_req_gid ON tuition_requests(gid);
+CREATE TABLE IF NOT EXISTS payments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  gid TEXT NOT NULL,
+  person_id INTEGER NOT NULL REFERENCES registered_people(id) ON DELETE CASCADE,
+  amount_bdt REAL NOT NULL,
+  method TEXT DEFAULT 'bKash',
+  status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending','Confirm')),
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_pay_gid ON payments(gid);
+CREATE INDEX IF NOT EXISTS idx_pay_person ON payments(person_id);
+CREATE TABLE IF NOT EXISTS wallet_entries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  person_id INTEGER NOT NULL REFERENCES registered_people(id) ON DELETE CASCADE,
+  gid TEXT, topic TEXT,
+  amount_bdt REAL NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('credit','withdraw')),
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_wallet_person ON wallet_entries(person_id);
+CREATE TABLE IF NOT EXISTS feedback_evaluation (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  person_id INTEGER NOT NULL REFERENCES registered_people(id) ON DELETE CASCADE,
+  gid TEXT, comment TEXT,
+  ranking INTEGER CHECK (ranking BETWEEN 1 AND 5),
+  complain TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_fb_person ON feedback_evaluation(person_id);
+CREATE INDEX IF NOT EXISTS idx_fb_gid ON feedback_evaluation(gid);
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  person_id INTEGER REFERENCES registered_people(id) ON DELETE SET NULL,
+  gid TEXT, sender TEXT, message TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_chat_gid ON chat_messages(gid);
+`;
+
+/* Databases (env.DB objects) already known to hold the schema. A WeakSet so
+   each distinct database is checked/initialised once per isolate, and a
+   replaced database is never mistaken for an initialised one. */
+const initializedDbs = new WeakSet();
+
+async function runSchema(db) {
+  if (typeof db.exec === 'function') {
+    try { await db.exec(SCHEMA_SQL); initializedDbs.add(db); return; }
+    catch { /* fall through to statement-by-statement execution */ }
+  }
+  for (const stmt of SCHEMA_SQL.split(';')) {
+    const s = stmt.trim();
+    if (s) await db.prepare(s).run();
+  }
+  initializedDbs.add(db);
+}
+
+/* Lazy auto-init: if registered_people is missing, create all tables, then
+   let the request continue normally. */
+async function ensureDb(db) {
+  if (!db || initializedDbs.has(db)) return;
+  const row = await db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='registered_people'").first();
+  if (!row) await runSchema(db);
+  else initializedDbs.add(db);
+}
+
 /* ---------- helpers ---------- */
 
 function send(obj, code = 200) {
@@ -98,6 +227,20 @@ async function walletBalance(db, id) {
 /* ---------- routes (same contract as server/server.js) ---------- */
 
 const routes = {
+  /* Self-initialisation: creates the (empty) tables if they do not exist.
+     Idempotent and unauthenticated by design — it only runs
+     CREATE ... IF NOT EXISTS statements, never reads or writes user data.
+     Errors surface through the entry point as {error} with status 500. */
+  'GET /api/init-db': async (request, db) => {
+    await runSchema(db);
+    return send({ ok: true, initialized: true }, 200);
+  },
+
+  'POST /api/init-db': async (request, db) => {
+    await runSchema(db);
+    return send({ ok: true, initialized: true }, 200);
+  },
+
   'POST /api/register': async (request, db) => {
     const b = await body(request);
     const reqFields = ['role', 'name', 'email', 'password'];
@@ -247,6 +390,12 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const key = request.method + ' ' + url.pathname;
+    // Lazy auto-init: on any API call other than init-db itself, make sure
+    // the tables exist before handling. If the check throws unexpectedly,
+    // proceed with normal handling and let the handler surface any error.
+    if (url.pathname.startsWith('/api/') && key !== 'GET /api/init-db' && key !== 'POST /api/init-db') {
+      try { await ensureDb(env.DB); } catch { /* proceed with normal handling */ }
+    }
     if (routes[key]) {
       try { return await routes[key](request, env.DB); }
       catch (e) { return send({ error: e.message }, 500); }
