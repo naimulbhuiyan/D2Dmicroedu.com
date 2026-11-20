@@ -22,4 +22,4 @@ directory = "./public"
 [[d1_databases]]
 binding = "DB"
 database_name = "d2d-microedu-db"
-database_id = "REPLACE_AFTER_CREATING_D1_DATABASE"
+database_id = "249b908e-4819-4cf1-9938-8598fe573751"
