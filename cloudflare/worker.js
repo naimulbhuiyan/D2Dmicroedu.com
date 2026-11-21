@@ -7,11 +7,9 @@
 // is not available in Workers. Stored format: "<saltHex>:<hashHex>".
 // Tokens and GIDs: crypto.getRandomValues.
 
-const PLANS = {
-  Teacher: { 'Teacher Basic': 300, 'Teacher Plus': 500 },
-  Student: { 'Student Basic': 200, 'Student Plus': 300 },
-  Other: { 'Other Basic': 200, 'Other Plus': 300 },
-};
+/* One plan list for every member — there are no roles anymore. Prices keep
+   the earlier price points (Basic 200, Plus 300, Teacher Plus 500 / month). */
+const PLANS = { 'Basic': 200, 'Plus': 300, 'Teacher Plus': 500 };
 
 /* ---------- database schema (embedded copy of cloudflare/schema-d1.sql) ----------
    Lets the Worker initialise its own D1 database (see /api/init-db and the
@@ -45,6 +43,8 @@ CREATE TABLE IF NOT EXISTS cv_details (
   rate_bdt_per_hour REAL NOT NULL DEFAULT 500,
   pricing_type TEXT DEFAULT 'hourly',
   expertise_time TEXT,
+  teacher_ready INTEGER DEFAULT 0,
+  accepts_time_exchange INTEGER DEFAULT 0,
   cv_file_name TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_cv_person ON cv_details(person_id);
@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS tuition_requests (
   rate_bdt_per_hour REAL NOT NULL DEFAULT 500,
   amount_bdt REAL NOT NULL,
   available_time TEXT,
+  pay_with TEXT DEFAULT 'money',
   status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending','Confirm','Ongoing','Done','Cancelled')),
   class_link TEXT,
   class_start TEXT,
@@ -122,6 +123,15 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_chat_gid ON chat_messages(gid);
+CREATE TABLE IF NOT EXISTS time_entries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  person_id INTEGER NOT NULL REFERENCES registered_people(id) ON DELETE CASCADE,
+  gid TEXT, topic TEXT,
+  minutes INTEGER NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('earn','spend')),
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_time_person ON time_entries(person_id);
 `;
 
 /* Databases (env.DB objects) already known to hold the schema. A WeakSet so
@@ -154,6 +164,13 @@ const MIGRATIONS = [
   'ALTER TABLE tuition_requests ADD COLUMN extension_minutes INTEGER DEFAULT 0',
   "ALTER TABLE tuition_requests ADD COLUMN extension_status TEXT DEFAULT 'None'",
   "ALTER TABLE payments ADD COLUMN escrow_status TEXT DEFAULT 'Awaiting payment'",
+  'ALTER TABLE cv_details ADD COLUMN teacher_ready INTEGER DEFAULT 0',
+  'ALTER TABLE cv_details ADD COLUMN accepts_time_exchange INTEGER DEFAULT 0',
+  "ALTER TABLE tuition_requests ADD COLUMN pay_with TEXT DEFAULT 'money'",
+  `CREATE TABLE IF NOT EXISTS time_entries (id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, gid TEXT, topic TEXT, minutes INTEGER NOT NULL, kind TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')))`,
+  /* Members who registered with a full CV before the two-step model are
+     already teachers — mark them ready (idempotent). */
+  "UPDATE cv_details SET teacher_ready=1 WHERE teacher_ready=0 AND subjects IS NOT NULL AND subjects<>''",
 ];
 
 async function runMigrations(db) {
@@ -287,6 +304,13 @@ async function walletBalance(db, id) {
   return r.t;
 }
 
+/* Time bank: minutes earned by teaching free / time-paid classes, minus
+   minutes spent learning from teachers who accept time exchange. */
+async function timeBalance(db, id) {
+  const r = await db.prepare('SELECT COALESCE(SUM(minutes),0) AS t FROM time_entries WHERE person_id=?').bind(id).first();
+  return r.t;
+}
+
 /* ---------- routes (same contract as server/server.js) ---------- */
 
 const routes = {
@@ -306,28 +330,58 @@ const routes = {
     return send({ ok: true, initialized: true }, 200);
   },
 
+  /* Two-step registration (no roles): step 1 is basic — name, email,
+     password, phone — and the member can learn right away. Step 2, the
+     full teacher profile, is completed later via /api/teacher-profile.
+     A full CV sent with registration is still accepted (older forms). */
   'POST /api/register': async (request, db) => {
     const b = await body(request);
-    const reqFields = ['role', 'name', 'email', 'password'];
-    const cvReq = ['education', 'university', 'profession', 'experience', 'speciality', 'subjects', 'level', 'address'];
-    if (!['Teacher', 'Student', 'Other'].includes(b.role)) return send({ error: 'Select role: Teacher, Student or Other' }, 400);
-    for (const f of reqFields) if (!b[f]) return send({ error: 'Missing field: ' + f }, 400);
-    for (const f of cvReq) if (!b.cv || !b.cv[f]) return send({ error: 'Detailed CV is mandatory. Missing CV field: ' + f }, 400);
+    for (const f of ['name', 'email', 'password']) if (!b[f]) return send({ error: 'Missing field: ' + f }, 400);
     if (await db.prepare('SELECT 1 AS x FROM registered_people WHERE email=?').bind(b.email).first())
       return send({ error: 'Email already registered' }, 409);
     const photoMode = ['personal', 'group', 'anonymous'].includes(b.photo_mode) ? b.photo_mode : 'personal';
     const photoData = photoMode !== 'anonymous' && typeof b.photo_data === 'string' && b.photo_data.startsWith('data:image/') && b.photo_data.length <= 500000 ? b.photo_data : null;
+    /* The legacy role column keeps its old CHECK constraint; new members
+       are stored as 'Other' and being a teacher is decided solely by the
+       completed teacher profile (cv_details.teacher_ready). */
+    const role = ['Teacher', 'Student', 'Other'].includes(b.role) ? b.role : 'Other';
     const info = await db.prepare('INSERT INTO registered_people(role,name,email,phone,mobile,password_hash,picture,photo_data,photo_mode,group_name) VALUES(?,?,?,?,?,?,?,?,?,?)')
-      .bind(b.role, b.name, b.email, b.phone || null, b.mobile || null, await hashPw(b.password), b.picture || null, photoData, photoMode, photoMode === 'group' ? (b.group_name || null) : null).run();
+      .bind(role, b.name, b.email, b.phone || null, b.mobile || null, await hashPw(b.password), b.picture || null, photoData, photoMode, photoMode === 'group' ? (b.group_name || null) : null).run();
     const pid = Number(info.meta.last_row_id);
-    const pricing = ['hourly', 'bidding', 'free'].includes(b.cv.pricing_type) ? b.cv.pricing_type : 'hourly';
-    const rate = pricing === 'free' ? 0 : (Number(b.cv.rate_bdt_per_hour) || 500);
-    await db.prepare('INSERT INTO cv_details(person_id,education,university,profession,position,experience,speciality,subjects,level,address,available_time,rate_bdt_per_hour,pricing_type,expertise_time,cv_file_name) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-      .bind(pid, b.cv.education, b.cv.university, b.cv.profession, b.cv.position || null, b.cv.experience, b.cv.speciality, b.cv.subjects, b.cv.level, b.cv.address, b.cv.available_time || null, rate, pricing, b.cv.expertise_time || null, b.cv.cv_file_name || null).run();
+    const cv = b.cv || {};
+    const cvReq = ['education', 'university', 'profession', 'experience', 'speciality', 'subjects', 'level', 'address'];
+    const fullCv = cvReq.every(f => cv[f]);
+    const pricing = ['hourly', 'bidding', 'free'].includes(cv.pricing_type) ? cv.pricing_type : 'hourly';
+    const rate = pricing === 'free' ? 0 : (Number(cv.rate_bdt_per_hour) || 500);
+    await db.prepare('INSERT INTO cv_details(person_id,education,university,profession,position,experience,speciality,subjects,level,address,available_time,rate_bdt_per_hour,pricing_type,expertise_time,teacher_ready,accepts_time_exchange,cv_file_name) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      .bind(pid, cv.education || '', cv.university || '', cv.profession || '', cv.position || null, cv.experience || '', cv.speciality || '', cv.subjects || '', cv.level || '', cv.address || '', cv.available_time || null, rate, pricing, cv.expertise_time || null, fullCv ? 1 : 0, cv.accepts_time_exchange ? 1 : 0, cv.cv_file_name || null).run();
     const token = randomHex(24);
     await db.prepare('INSERT INTO sessions(token,person_id) VALUES(?,?)').bind(token, pid).run();
     const person = await db.prepare('SELECT * FROM registered_people WHERE id=?').bind(pid).first();
     return send({ person: pub(person), cv: await cvOf(db, pid), token }, 201);
+  },
+
+  /* Step 2: complete (or update) the teacher profile. Teachers carry the
+     responsibility, so every field is required here. Saving this profile
+     is what makes the member appear in the teacher list. */
+  'POST /api/teacher-profile': async (request, db) => {
+    const me = await auth(request, db); if (!me) return send({ error: 'Sign in required' }, 401);
+    const b = await body(request);
+    const cv = b.cv || b;
+    const cvReq = ['education', 'university', 'profession', 'experience', 'speciality', 'subjects', 'level', 'address'];
+    for (const f of cvReq) if (!cv[f]) return send({ error: 'Teacher profile is incomplete. Missing field: ' + f }, 400);
+    const pricing = ['hourly', 'bidding', 'free'].includes(cv.pricing_type) ? cv.pricing_type : 'hourly';
+    const rate = pricing === 'free' ? 0 : (Number(cv.rate_bdt_per_hour) || 500);
+    const acceptsTime = cv.accepts_time_exchange ? 1 : 0;
+    const existing = await cvOf(db, me.id);
+    if (existing) {
+      await db.prepare('UPDATE cv_details SET education=?,university=?,profession=?,position=?,experience=?,speciality=?,subjects=?,level=?,address=?,available_time=?,rate_bdt_per_hour=?,pricing_type=?,expertise_time=?,teacher_ready=1,accepts_time_exchange=?,cv_file_name=? WHERE person_id=?')
+        .bind(cv.education, cv.university, cv.profession, cv.position || null, cv.experience, cv.speciality, cv.subjects, cv.level, cv.address, cv.available_time || null, rate, pricing, cv.expertise_time || null, acceptsTime, cv.cv_file_name || existing.cv_file_name || null, me.id).run();
+    } else {
+      await db.prepare('INSERT INTO cv_details(person_id,education,university,profession,position,experience,speciality,subjects,level,address,available_time,rate_bdt_per_hour,pricing_type,expertise_time,teacher_ready,accepts_time_exchange,cv_file_name) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+        .bind(me.id, cv.education, cv.university, cv.profession, cv.position || null, cv.experience, cv.speciality, cv.subjects, cv.level, cv.address, cv.available_time || null, rate, pricing, cv.expertise_time || null, 1, acceptsTime, cv.cv_file_name || null).run();
+    }
+    return send({ person: pub(me), cv: await cvOf(db, me.id) }, 200);
   },
 
   'POST /api/signin': async (request, db) => {
@@ -347,16 +401,17 @@ const routes = {
       const subscription = (await db.prepare('SELECT * FROM subscriptions WHERE person_id=? ORDER BY id DESC LIMIT 1').bind(p.id).first()) || null;
       people.push({ ...pubPublic(p), cv: await cvOf(db, p.id), subscription });
     }
-    const counts = {};
-    for (const r of ['Teacher', 'Student', 'Other']) {
-      const row = await db.prepare('SELECT COUNT(*) AS c FROM registered_people WHERE role=?').bind(r).first();
-      counts[r] = row.c;
-    }
+    const tRow = await db.prepare('SELECT COUNT(*) AS c FROM cv_details WHERE teacher_ready=1').first();
+    const teachersCount = tRow ? tRow.c : 0;
+    const ttRow = await db.prepare('SELECT COUNT(*) AS c FROM cv_details WHERE teacher_ready=1 AND accepts_time_exchange=1').first();
+    /* Teacher/Student keys are kept for older pages; teachers/members are
+       the real counts now that registration has no roles. */
+    const counts = { teachers: teachersCount, members: people.length, time_teachers: ttRow ? ttRow.c : 0, Teacher: teachersCount, Student: people.length - teachersCount, Other: 0 };
     return send({ counts, total: people.length, people }, 200);
   },
 
   'GET /api/teachers': async (request, db) => {
-    const rows = (await db.prepare("SELECT * FROM registered_people WHERE role='Teacher' ORDER BY id").all()).results;
+    const rows = (await db.prepare('SELECT p.* FROM registered_people p JOIN cv_details c ON c.person_id=p.id WHERE c.teacher_ready=1 ORDER BY p.id').all()).results;
     const teachers = [];
     for (const p of rows) teachers.push({ ...pubPublic(p), cv: await cvOf(db, p.id) });
     return send({ teachers }, 200);
@@ -366,9 +421,8 @@ const routes = {
     const me = await auth(request, db); if (!me) return send({ error: 'Sign in required' }, 401);
     const b = await body(request);
     const months = [1, 3, 6, 12].includes(Number(b.months)) ? Number(b.months) : 1;
-    const plans = PLANS[me.role] || PLANS.Other;
-    const plan = plans[b.plan] !== undefined ? b.plan : Object.keys(plans)[0];
-    const amount = plans[plan] * months;
+    const plan = PLANS[b.plan] !== undefined ? b.plan : Object.keys(PLANS)[0];
+    const amount = PLANS[plan] * months;
     const info = await db.prepare("INSERT INTO subscriptions(person_id,plan,months,amount_bdt,status) VALUES(?,?,?,?,'Pending')")
       .bind(me.id, plan, months, amount).run();
     const subscription = await db.prepare('SELECT * FROM subscriptions WHERE id=?').bind(Number(info.meta.last_row_id)).first();
@@ -387,11 +441,11 @@ const routes = {
     const me = await auth(request, db); if (!me) return send({ error: 'Sign in required' }, 401);
     const b = await body(request);
     if (!b.teacher_id || !b.subject || !b.topic) return send({ error: 'teacher_id, subject and topic are required' }, 400);
-    const t = await db.prepare("SELECT * FROM registered_people WHERE id=? AND role='Teacher'").bind(b.teacher_id).first();
-    if (!t) return send({ error: 'Teacher not found' }, 404);
-    const cv = await cvOf(db, t.id);
-    const pricing = cv && cv.pricing_type ? cv.pricing_type : 'hourly';
-    let rate = cv ? Number(cv.rate_bdt_per_hour) || 0 : 500;
+    const t = await db.prepare('SELECT * FROM registered_people WHERE id=?').bind(b.teacher_id).first();
+    const cv = t ? await cvOf(db, t.id) : null;
+    if (!t || !cv || !cv.teacher_ready) return send({ error: 'Teacher not found' }, 404);
+    const pricing = cv.pricing_type ? cv.pricing_type : 'hourly';
+    let rate = Number(cv.rate_bdt_per_hour) || 0;
     if (pricing === 'hourly' && !rate) rate = 500;
     const hours = Number(b.hours) || 1;
     let amount = hours * rate;
@@ -400,10 +454,19 @@ const routes = {
       const offer = Number(b.offer_amount) || 0;
       if (offer > 0) amount = offer;
     }
+    /* Time bank payment: only with teachers who opted in, and only when
+       the student holds enough time credit for the booked hours. */
+    const payWith = b.pay_with === 'time' ? 'time' : 'money';
+    if (payWith === 'time') {
+      if (!cv.accepts_time_exchange) return send({ error: 'This teacher does not accept time exchange' }, 400);
+      const need = Math.round(hours * 60);
+      if (await timeBalance(db, me.id) < need) return send({ error: 'Not enough time credit for this class' }, 400);
+      amount = 0;
+    }
     const g = await newGid(db);
     const link = 'https://meet.google.com/' + g;
-    const info = await db.prepare("INSERT INTO tuition_requests(gid,student_id,teacher_id,level,subject,chapter,topic,hours,rate_bdt_per_hour,amount_bdt,available_time,status,class_link,class_start) VALUES(?,?,?,?,?,?,?,?,?,?,?,'Pending',?,?)")
-      .bind(g, me.id, t.id, b.level || null, b.subject, b.chapter || null, b.topic, hours, rate, amount, b.available_time || null, link, b.class_start || null).run();
+    const info = await db.prepare("INSERT INTO tuition_requests(gid,student_id,teacher_id,level,subject,chapter,topic,hours,rate_bdt_per_hour,amount_bdt,available_time,status,class_link,class_start,pay_with) VALUES(?,?,?,?,?,?,?,?,?,?,?,'Pending',?,?,?)")
+      .bind(g, me.id, t.id, b.level || null, b.subject, b.chapter || null, b.topic, hours, rate, amount, b.available_time || null, link, b.class_start || null, payWith).run();
     await db.prepare("INSERT INTO payments(gid,person_id,amount_bdt,status) VALUES(?,?,?,'Pending')").bind(g, me.id, amount).run();
     const requestRow = await db.prepare('SELECT * FROM tuition_requests WHERE id=?').bind(Number(info.meta.last_row_id)).first();
     return send({ request: stripLink(requestRow) }, 201);
@@ -419,9 +482,22 @@ const routes = {
     await db.prepare('UPDATE tuition_requests SET status=? WHERE gid=?').bind(next, r.gid).run();
     if (next === 'Confirm') await db.prepare("UPDATE payments SET status='Confirm', escrow_status='Held' WHERE gid=?").bind(r.gid).run();
     if (next === 'Done') {
-      const exists = await db.prepare("SELECT 1 AS x FROM wallet_entries WHERE gid=? AND kind='credit'").bind(r.gid).first();
-      if (!exists) await db.prepare("INSERT INTO wallet_entries(person_id,gid,topic,amount_bdt,kind) VALUES(?,?,?,?,'credit')")
-        .bind(r.teacher_id, r.gid, r.topic, r.amount_bdt).run();
+      const mins = Math.round((Number(r.hours) || 1) * 60);
+      const timeExists = await db.prepare("SELECT 1 AS x FROM time_entries WHERE gid=? AND kind='earn'").bind(r.gid).first();
+      if (r.pay_with === 'time') {
+        /* Time-paid class: the student's time credit moves to the teacher. */
+        if (!timeExists) {
+          await db.prepare("INSERT INTO time_entries(person_id,gid,topic,minutes,kind) VALUES(?,?,?,?,'earn')").bind(r.teacher_id, r.gid, r.topic, mins).run();
+          await db.prepare("INSERT INTO time_entries(person_id,gid,topic,minutes,kind) VALUES(?,?,?,?,'spend')").bind(r.student_id, r.gid, r.topic, -mins).run();
+        }
+      } else if (Number(r.amount_bdt) > 0) {
+        const exists = await db.prepare("SELECT 1 AS x FROM wallet_entries WHERE gid=? AND kind='credit'").bind(r.gid).first();
+        if (!exists) await db.prepare("INSERT INTO wallet_entries(person_id,gid,topic,amount_bdt,kind) VALUES(?,?,?,?,'credit')")
+          .bind(r.teacher_id, r.gid, r.topic, r.amount_bdt).run();
+      } else if (!timeExists) {
+        /* Free class: the teacher earns the time as time-bank credit. */
+        await db.prepare("INSERT INTO time_entries(person_id,gid,topic,minutes,kind) VALUES(?,?,?,?,'earn')").bind(r.teacher_id, r.gid, r.topic, mins).run();
+      }
       await db.prepare("UPDATE payments SET escrow_status='Released' WHERE gid=?").bind(r.gid).run();
     }
     const updated = await db.prepare('SELECT * FROM tuition_requests WHERE gid=?').bind(r.gid).first();
@@ -514,6 +590,38 @@ const routes = {
       .bind(me.id, b.gid || null, b.comment || null, b.ranking ? Number(b.ranking) : null, b.complain || null).run();
     const feedback = await db.prepare('SELECT * FROM feedback_evaluation WHERE id=?').bind(Number(info.meta.last_row_id)).first();
     return send({ feedback }, 201);
+  },
+
+  /* Teacher suggestions for a help request: match the learner's words
+     (subject, topic, chapter, level) against each teacher's subjects,
+     speciality and expertise; best matches first, then lower rate. */
+  'GET /api/suggest': async (request, db) => {
+    const q = new URL(request.url).searchParams;
+    const words = [...new Set(((q.get('subject') || '') + ' ' + (q.get('topic') || '') + ' ' + (q.get('chapter') || '')).toLowerCase().split(/[^a-z0-9\u0980-\u09FF]+/).filter(w => w.length >= 3))];
+    const level = (q.get('level') || '').toLowerCase().trim();
+    const rows = (await db.prepare('SELECT p.* FROM registered_people p JOIN cv_details c ON c.person_id=p.id WHERE c.teacher_ready=1 ORDER BY p.id').all()).results;
+    const scored = [];
+    for (const p of rows) {
+      const cv = await cvOf(db, p.id);
+      const hay = ((cv.subjects || '') + ' ' + (cv.speciality || '') + ' ' + (cv.expertise_time || '') + ' ' + (cv.profession || '')).toLowerCase();
+      const matched = words.filter(w => hay.includes(w));
+      let score = matched.length;
+      if (level && (cv.level || '').toLowerCase().includes(level)) score += 2;
+      scored.push({ ...pubPublic(p), cv, match_score: score, matched });
+    }
+    scored.sort((a, b) => b.match_score - a.match_score || (Number(a.cv.rate_bdt_per_hour) || 0) - (Number(b.cv.rate_bdt_per_hour) || 0));
+    return send({ teachers: scored.slice(0, 6) }, 200);
+  },
+
+  /* No member-to-member messaging by design: learners send a request to
+     microedu, microedu finalizes it from both sides, and only then is the
+     meeting organized. Contact happens through the request flow only. */
+
+  /* Time bank: balance and history for the signed-in member. */
+  'GET /api/timebank': async (request, db) => {
+    const me = await auth(request, db); if (!me) return send({ error: 'Sign in required' }, 401);
+    const entries = (await db.prepare('SELECT * FROM time_entries WHERE person_id=? ORDER BY id DESC').bind(me.id).all()).results;
+    return send({ balance_minutes: await timeBalance(db, me.id), entries }, 200);
   },
 
   'GET /api/my-requests': async (request, db) => {

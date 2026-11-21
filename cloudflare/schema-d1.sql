@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS cv_details (
   rate_bdt_per_hour REAL NOT NULL DEFAULT 500,
   pricing_type TEXT DEFAULT 'hourly',
   expertise_time TEXT,
+  teacher_ready INTEGER DEFAULT 0,
+  accepts_time_exchange INTEGER DEFAULT 0,
   cv_file_name TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_cv_person ON cv_details(person_id);
@@ -63,6 +65,7 @@ CREATE TABLE IF NOT EXISTS tuition_requests (
   rate_bdt_per_hour REAL NOT NULL DEFAULT 500,
   amount_bdt REAL NOT NULL,
   available_time TEXT,
+  pay_with TEXT DEFAULT 'money',
   status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending','Confirm','Ongoing','Done','Cancelled')),
   class_link TEXT,
   class_start TEXT,
@@ -115,3 +118,12 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_chat_gid ON chat_messages(gid);
+CREATE TABLE IF NOT EXISTS time_entries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  person_id INTEGER NOT NULL,
+  gid TEXT, topic TEXT,
+  minutes INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_time_person ON time_entries(person_id);
