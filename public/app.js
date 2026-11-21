@@ -112,10 +112,10 @@ function showRegSuccess(p) {
     `<button type="button" class="btn btn-primary" onclick="goTeach()">👩‍🏫 Become a teacher — complete my profile</button></span>`;
   setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60);
 }
-window.goHelp = () => { location.href = 'help.html'; };
+window.goHelp = () => { location.href = 'help'; };
 window.goTeach = () => {
   const c = $('teacherCard');
-  if (!c) { location.href = 'dashboard.html#teacher'; return; }
+  if (!c) { location.href = 'dashboard#teacher'; return; }
   c.classList.remove('hidden');
   c.scrollIntoView({ behavior: 'smooth', block: 'start' });
   c.classList.add('flash');
@@ -259,7 +259,7 @@ function helpPayload(teacher_id) {
 }
 async function sendRequests(ids) {
   if (!ids.length) return msg($('bulkMsg'), 'Tap "Suggest teachers for me" first.', false);
-  if (!token) { msg($('bulkMsg'), 'Please register or sign in first — it takes one minute.', false); setTimeout(() => { location.href = 'register.html'; }, 900); return; }
+  if (!token) { msg($('bulkMsg'), 'Please register or sign in first — it takes one minute.', false); setTimeout(() => { location.href = 'register'; }, 900); return; }
   let sent = 0;
   for (const id of ids) { try { await api('/api/requests', { method: 'POST', body: JSON.stringify(helpPayload(id)) }); sent++; } catch (e) { /* skip a failed one */ } }
   msg($('bulkMsg'), sent ? `✅ Request sent to ${sent} teacher(s). microedu will finalize it from both sides and organize your meeting.` : 'Could not send — please sign in and try again.', !!sent);

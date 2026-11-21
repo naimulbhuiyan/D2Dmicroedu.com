@@ -333,6 +333,7 @@ const server = http.createServer(async (req,res) => {
   if (routes[key]) { try { await routes[key](req,res,url); } catch(e){ send(res,500,{error:e.message}); } return; }
   if (url.pathname.startsWith('/api/')) return send(res,404,{error:'Not found'});
   let file = url.pathname === '/' ? '/index.html' : url.pathname;
+  if (!path.extname(file)) file += '.html';
   const fp = path.join(__dirname,'..','public', path.normalize(file).replace(/^(\.\.[\/\\])+/,''));
   fs.readFile(fp,(err,data)=>{ if(err){res.writeHead(404);return res.end('Not found');} res.writeHead(200,{'Content-Type':MIME[path.extname(fp)]||'application/octet-stream'}); res.end(data); });
 });
