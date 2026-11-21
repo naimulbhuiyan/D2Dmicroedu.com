@@ -1,4 +1,4 @@
-// D2D microedu.com — Cloudflare Worker (single file)
+// microedu.com — Cloudflare Worker (single file)
 // Same REST API contract as server/server.js (Node), backed by a D1 database
 // (binding: env.DB). Static frontend is served from the ASSETS binding
 // (the ./public directory, configured in wrangler.toml).
@@ -27,6 +27,9 @@ CREATE TABLE IF NOT EXISTS registered_people (
   phone TEXT, mobile TEXT,
   password_hash TEXT NOT NULL,
   picture TEXT,
+  photo_data TEXT,
+  photo_mode TEXT DEFAULT 'personal',
+  group_name TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_people_role ON registered_people(role);
@@ -40,6 +43,8 @@ CREATE TABLE IF NOT EXISTS cv_details (
   subjects TEXT NOT NULL, level TEXT NOT NULL,
   address TEXT NOT NULL, available_time TEXT,
   rate_bdt_per_hour REAL NOT NULL DEFAULT 500,
+  pricing_type TEXT DEFAULT 'hourly',
+  expertise_time TEXT,
   cv_file_name TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_cv_person ON cv_details(person_id);
@@ -132,6 +137,23 @@ async function runSchema(db) {
   initializedDbs.add(db);
 }
 
+/* Column additions for databases created before the photo / pricing
+   update. Each ALTER is attempted and "duplicate column" errors ignored,
+   so this is safe to run on every fresh isolate. */
+const MIGRATIONS = [
+  'ALTER TABLE registered_people ADD COLUMN photo_data TEXT',
+  "ALTER TABLE registered_people ADD COLUMN photo_mode TEXT DEFAULT 'personal'",
+  'ALTER TABLE registered_people ADD COLUMN group_name TEXT',
+  "ALTER TABLE cv_details ADD COLUMN pricing_type TEXT DEFAULT 'hourly'",
+  'ALTER TABLE cv_details ADD COLUMN expertise_time TEXT',
+];
+
+async function runMigrations(db) {
+  for (const sql of MIGRATIONS) {
+    try { await db.prepare(sql).run(); } catch { /* column already exists */ }
+  }
+}
+
 /* Lazy auto-init: if registered_people is missing, create all tables, then
    let the request continue normally. */
 async function ensureDb(db) {
@@ -140,6 +162,7 @@ async function ensureDb(db) {
     "SELECT name FROM sqlite_master WHERE type='table' AND name='registered_people'").first();
   if (!row) await runSchema(db);
   else initializedDbs.add(db);
+  await runMigrations(db);
 }
 
 /* ---------- helpers ---------- */
@@ -212,7 +235,19 @@ async function auth(request, db) {
 const pub = p => p && ({
   id: p.id, role: p.role, name: p.name, email: p.email,
   phone: p.phone, mobile: p.mobile, picture: p.picture, created_at: p.created_at,
+  photo_data: p.photo_data || null, photo_mode: p.photo_mode || 'personal',
+  group_name: p.group_name || null,
 });
+
+/* Public view: anonymous members are masked — no name, contacts or photo. */
+const pubPublic = p => {
+  const v = pub(p);
+  if (!v) return v;
+  if (v.photo_mode === 'anonymous') {
+    return { ...v, name: 'Anonymous', email: null, phone: null, mobile: null, picture: null, photo_data: null, group_name: null, anonymous: true };
+  }
+  return v;
+};
 
 // Returns undefined (not null) when absent, mirroring the Node server's JSON shape.
 async function cvOf(db, id) {
@@ -233,11 +268,13 @@ const routes = {
      Errors surface through the entry point as {error} with status 500. */
   'GET /api/init-db': async (request, db) => {
     await runSchema(db);
+    await runMigrations(db);
     return send({ ok: true, initialized: true }, 200);
   },
 
   'POST /api/init-db': async (request, db) => {
     await runSchema(db);
+    await runMigrations(db);
     return send({ ok: true, initialized: true }, 200);
   },
 
@@ -250,11 +287,15 @@ const routes = {
     for (const f of cvReq) if (!b.cv || !b.cv[f]) return send({ error: 'Detailed CV is mandatory. Missing CV field: ' + f }, 400);
     if (await db.prepare('SELECT 1 AS x FROM registered_people WHERE email=?').bind(b.email).first())
       return send({ error: 'Email already registered' }, 409);
-    const info = await db.prepare('INSERT INTO registered_people(role,name,email,phone,mobile,password_hash,picture) VALUES(?,?,?,?,?,?,?)')
-      .bind(b.role, b.name, b.email, b.phone || null, b.mobile || null, await hashPw(b.password), b.picture || null).run();
+    const photoMode = ['personal', 'group', 'anonymous'].includes(b.photo_mode) ? b.photo_mode : 'personal';
+    const photoData = photoMode !== 'anonymous' && typeof b.photo_data === 'string' && b.photo_data.startsWith('data:image/') && b.photo_data.length <= 500000 ? b.photo_data : null;
+    const info = await db.prepare('INSERT INTO registered_people(role,name,email,phone,mobile,password_hash,picture,photo_data,photo_mode,group_name) VALUES(?,?,?,?,?,?,?,?,?,?)')
+      .bind(b.role, b.name, b.email, b.phone || null, b.mobile || null, await hashPw(b.password), b.picture || null, photoData, photoMode, photoMode === 'group' ? (b.group_name || null) : null).run();
     const pid = Number(info.meta.last_row_id);
-    await db.prepare('INSERT INTO cv_details(person_id,education,university,profession,position,experience,speciality,subjects,level,address,available_time,rate_bdt_per_hour,cv_file_name) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)')
-      .bind(pid, b.cv.education, b.cv.university, b.cv.profession, b.cv.position || null, b.cv.experience, b.cv.speciality, b.cv.subjects, b.cv.level, b.cv.address, b.cv.available_time || null, Number(b.cv.rate_bdt_per_hour) || 500, b.cv.cv_file_name || null).run();
+    const pricing = ['hourly', 'bidding', 'free'].includes(b.cv.pricing_type) ? b.cv.pricing_type : 'hourly';
+    const rate = pricing === 'free' ? 0 : (Number(b.cv.rate_bdt_per_hour) || 500);
+    await db.prepare('INSERT INTO cv_details(person_id,education,university,profession,position,experience,speciality,subjects,level,address,available_time,rate_bdt_per_hour,pricing_type,expertise_time,cv_file_name) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      .bind(pid, b.cv.education, b.cv.university, b.cv.profession, b.cv.position || null, b.cv.experience, b.cv.speciality, b.cv.subjects, b.cv.level, b.cv.address, b.cv.available_time || null, rate, pricing, b.cv.expertise_time || null, b.cv.cv_file_name || null).run();
     const token = randomHex(24);
     await db.prepare('INSERT INTO sessions(token,person_id) VALUES(?,?)').bind(token, pid).run();
     const person = await db.prepare('SELECT * FROM registered_people WHERE id=?').bind(pid).first();
@@ -276,7 +317,7 @@ const routes = {
     const people = [];
     for (const p of rows) {
       const subscription = (await db.prepare('SELECT * FROM subscriptions WHERE person_id=? ORDER BY id DESC LIMIT 1').bind(p.id).first()) || null;
-      people.push({ ...pub(p), cv: await cvOf(db, p.id), subscription });
+      people.push({ ...pubPublic(p), cv: await cvOf(db, p.id), subscription });
     }
     const counts = {};
     for (const r of ['Teacher', 'Student', 'Other']) {
@@ -289,7 +330,7 @@ const routes = {
   'GET /api/teachers': async (request, db) => {
     const rows = (await db.prepare("SELECT * FROM registered_people WHERE role='Teacher' ORDER BY id").all()).results;
     const teachers = [];
-    for (const p of rows) teachers.push({ ...pub(p), cv: await cvOf(db, p.id) });
+    for (const p of rows) teachers.push({ ...pubPublic(p), cv: await cvOf(db, p.id) });
     return send({ teachers }, 200);
   },
 
@@ -321,9 +362,16 @@ const routes = {
     const t = await db.prepare("SELECT * FROM registered_people WHERE id=? AND role='Teacher'").bind(b.teacher_id).first();
     if (!t) return send({ error: 'Teacher not found' }, 404);
     const cv = await cvOf(db, t.id);
-    const rate = cv ? Number(cv.rate_bdt_per_hour) || 500 : 500;
+    const pricing = cv && cv.pricing_type ? cv.pricing_type : 'hourly';
+    let rate = cv ? Number(cv.rate_bdt_per_hour) || 0 : 500;
+    if (pricing === 'hourly' && !rate) rate = 500;
     const hours = Number(b.hours) || 1;
-    const amount = hours * rate;
+    let amount = hours * rate;
+    if (pricing === 'free') { rate = 0; amount = 0; }
+    if (pricing === 'bidding') {
+      const offer = Number(b.offer_amount) || 0;
+      if (offer > 0) amount = offer;
+    }
     const g = await newGid(db);
     const link = 'https://meet.google.com/' + g;
     const info = await db.prepare("INSERT INTO tuition_requests(gid,student_id,teacher_id,level,subject,chapter,topic,hours,rate_bdt_per_hour,amount_bdt,available_time,status,class_link) VALUES(?,?,?,?,?,?,?,?,?,?,?,'Pending',?)")
@@ -403,7 +451,7 @@ export default {
     if (url.pathname.startsWith('/api/')) return send({ error: 'Not found' }, 404);
     // Static frontend (public/) via the Workers Assets binding.
     if (env.ASSETS) return env.ASSETS.fetch(request);
-    return new Response('D2D microedu.com — API is running. Static assets are served via the ASSETS binding (see wrangler.toml / docs/CLOUDFLARE.md).', {
+    return new Response('microedu.com — API is running. Static assets are served via the ASSETS binding (see wrangler.toml / docs/CLOUDFLARE.md).', {
       status: 200, headers: { 'Content-Type': 'text/plain' },
     });
   },

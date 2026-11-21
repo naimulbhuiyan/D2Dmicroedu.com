@@ -1,96 +1,360 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>D2D microedu.com</title><link rel="stylesheet" href="/styles.css"></head>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>microedu.com — Micro Edu. Support | Online 1-to-1 Tuition in Bangladesh</title>
+<meta name="description" content="microedu.com — Micro Edu. Support. Get live 1-to-1 online tuition help on any part of any subject, from verified teachers in Bangladesh. Pay in advance by bKash, full refund if there is a problem.">
+<link rel="icon" type="image/svg+xml" href="/logo.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+</head>
 <body>
-<header class="topbar"><div class="wrap topbar-in">
-<a class="brand" href="#top"><span>📖</span>D2D microedu.com</a>
-<nav class="nav">
-<a href="#register">Registration</a><a href="#signin">Sign In</a><a href="#subscription">Subscription</a>
-<a href="#student">Student</a><a href="#teacher">Teacher</a><a href="#people">Registered People</a>
-</nav></div></header>
 
-<main class="wrap" id="top">
-<div class="cover"><div class="cover-card">
-<h1>D2D microedu.com</h1>
-<p>Micro Edu. Support — direct online tuition support, on any part of any subject, at any time.<br>
-Teacher in <b style="color:var(--teal)">teal</b> · Student in <b style="color:var(--orange)">orange</b> · BDT 500 / hour</p>
-<p><a class="btn btn-red" href="#student">Need Support??? Enter</a> <a class="btn btn-teal" href="#register">Register — Teacher / Student / Other</a></p>
-</div></div>
+<div class="announce" data-i18n-html="announce">Pay in advance by <b>bKash</b> &nbsp;·&nbsp; Full refund if there is a problem &nbsp;·&nbsp; Help on any part of any subject, at any time</div>
 
-<section id="register"><h2>Registration — One Form for All</h2>
-<div class="card"><p>Select your option. This one registration is for Teacher, Student and Others. Your <b>detailed CV is mandatory</b> and powers your profile, teacher cards, requests, wallet and subscription.</p>
-<div class="rolepick" id="rolePick">
-<button type="button" class="btn btn-ghost" data-role="Teacher">Teacher</button>
-<button type="button" class="btn btn-ghost" data-role="Student">Student</button>
-<button type="button" class="btn btn-ghost" data-role="Other">Other</button></div>
-<form id="regForm">
-<input type="hidden" id="regRole" value="Student">
-<div class="row"><div><label>Name</label><input id="rName" required></div>
-<div><label>Email</label><input id="rEmail" type="email" required></div></div>
-<div class="row"><div><label>Password</label><input id="rPass" type="password" required></div>
-<div><label>Retype Password</label><input id="rPass2" type="password" required></div></div>
-<div class="row"><div><label>Phone</label><input id="rPhone"></div>
-<div><label>Mobile</label><input id="rMobile"></div></div>
-<div><label>Picture (file name)</label><input id="rPicture" placeholder="my-photo.jpg"></div>
-<h3>Detailed CV (mandatory)</h3>
-<div class="row"><div><label>Education *</label><input id="cEducation" required placeholder="Masters Completed / Honors Completed"></div>
-<div><label>University / Institution *</label><input id="cUniversity" required></div></div>
-<div class="row"><div><label>Profession *</label><input id="cProfession" required></div>
-<div><label>Position</label><input id="cPosition"></div></div>
-<div class="row"><div><label>Experience *</label><input id="cExperience" required></div>
-<div><label>Speciality / Skills *</label><input id="cSpeciality" required></div></div>
-<div class="row"><div><label>Subjects *</label><input id="cSubjects" required placeholder="Statistics, Excel"></div>
-<div><label>Level *</label><input id="cLevel" required placeholder="Honors"></div></div>
-<div class="row"><div><label>Address *</label><input id="cAddress" required></div>
-<div><label>Daily Available Time</label><input id="cAvail" placeholder="6pm - 10pm"></div></div>
-<div class="row"><div><label>Rate BDT / Hour</label><input id="cRate" type="number" value="500"></div>
-<div><label>CV File (upload — file name stored)</label><input id="cFile" type="file"></div></div>
-<p><button class="btn btn-red" type="submit">Register</button></p>
-<div class="msg" id="regMsg"></div></form></div></section>
+<header class="topbar">
+  <div class="wrap topbar-in">
+    <a class="brand" href="#top" aria-label="microedu.com home">
+      <img src="/logo.svg" alt="" class="brand-mark">
+      <span class="brand-name">micro<span class="b-teal">edu</span><span class="b-orange">.com</span></span>
+    </a>
+    <nav class="nav">
+      <a href="#how" data-i18n="navHow">How it works</a>
+      <a href="#student" data-i18n="navFind">Find a Teacher</a>
+      <a href="#subscription" data-i18n="navSub">Subscription</a>
+      <a href="#people" data-i18n="navPeople">Registered People</a>
+    </nav>
+    <div class="top-actions">
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button type="button" id="langEn" class="sel">EN</button>
+        <button type="button" id="langBn">বাংলা</button>
+      </div>
+      <a class="btn btn-ghost" href="#signin" data-i18n="signInBtn">Sign In</a>
+      <a class="btn btn-primary" href="#register" data-i18n="joinFree">Join Free</a>
+    </div>
+  </div>
+</header>
 
-<section id="signin"><h2>Sign In</h2><div class="card">
-<form id="signForm"><div class="row"><div><label>Email</label><input id="sEmail" type="email" required></div>
-<div><label>Password</label><input id="sPass" type="password" required></div></div>
-<p><button class="btn btn-teal" type="submit">Sign In</button> <button class="btn btn-ghost" type="button" id="signOut">Sign Out</button></p>
-<div class="msg" id="signMsg"></div></form>
-<div id="profileBox" class="hidden"><h3>My Profile (from my CV)</h3><div id="profileContent"></div></div>
-</div></section>
+<main id="top">
 
-<section id="subscription"><h2>Subscription</h2><div class="card">
-<p>Plan by your role, duration 1 / 3 / 6 / 12 months. Status: Pending → Confirm.</p>
-<div class="row"><div><label>Plan</label><select id="subPlan"></select></div>
-<div><label>Duration (months)</label><select id="subMonths"><option>1</option><option>3</option><option>6</option><option>12</option></select></div></div>
-<p><button class="btn btn-red" id="subBtn">Subscribe</button></p>
-<div id="subList"></div><div class="msg" id="subMsg"></div></div></section>
+  <!-- HERO -->
+  <section class="hero">
+    <div class="wrap hero-in">
+      <div class="hero-text">
+        <span class="pill" data-i18n="heroPill">🎓 Micro Edu. Support — live 1-to-1 online tuition</span>
+        <h1 data-i18n-html="heroTitle">Stuck on one topic?<br>Learn it <span class="u-line">live</span>, from a<br>real teacher.</h1>
+        <p class="lead" data-i18n="heroLead">Register once, pick a verified teacher, name the exact chapter or topic you are stuck on — and join a live class at your time. Any subject, any level, anywhere in Bangladesh.</p>
+        <div class="hero-cta">
+          <a class="btn btn-primary btn-lg" href="#student" data-i18n="heroFind">Find a Teacher →</a>
+          <a class="btn btn-white btn-lg" href="#register" data-i18n="heroJoinTeacher">Join as a Teacher</a>
+        </div>
+        <div class="hero-points">
+          <span data-i18n="heroP1">✔ Verified teacher CVs</span>
+          <span data-i18n="heroP2">✔ From BDT 500/hour</span>
+          <span data-i18n="heroP3">✔ Full refund guarantee</span>
+        </div>
+      </div>
+      <div class="hero-art">
+        <div class="hero-frame"><img src="/images/hero.webp" alt="Bangladeshi student with her books and tablet"></div>
+        <div class="float-card fc-1"><span class="fc-ic orange">★</span><span><b data-i18n="fc1t">Trusted teachers</b><small data-i18n="fc1s">Detailed CV on every profile</small></span></div>
+        <div class="float-card fc-2"><span class="fc-ic teal">▶</span><span><b data-i18n="fc2t">Live class link</b><small data-i18n="fc2s">Google Meet, at your time</small></span></div>
+      </div>
+    </div>
+  </section>
 
-<section id="student"><h2 style="color:var(--orange-dark)">Student — Need Support???</h2>
-<div class="card orange"><h3>Choose Teacher</h3>
-<div class="row"><div><label>Level</label><input id="qLevel" value="Honors"></div>
-<div><label>Subject</label><input id="qSubject" value="Statistics+Excel"></div></div>
-<div class="row"><div><label>Chapter</label><input id="qChapter" value="Graphs in Excel"></div>
-<div><label>Topic</label><input id="qTopic" value="Bar Chart, Pie Chart, Scatter Plot"></div></div>
-<div class="row"><div><label>Hours</label><input id="qHours" type="number" value="1" min="1"></div>
-<div><label>Available Time</label><input id="qTime" placeholder="Today 7pm"></div></div>
-<p>Total: <b id="qTotal">BDT 500</b> (hours × BDT 500/hr)</p>
-<h3>Teacher List (from database)</h3><div class="grid" id="teacherList"></div>
-<div class="msg" id="reqMsg"></div>
-<h3>My Requests</h3><div id="myRequests"></div></div></section>
+  <!-- FEATURES -->
+  <section class="features wrap">
+    <div class="feature-card">
+      <span class="f-ic teal">📚</span>
+      <h3 data-i18n="feat1t">Any part of any subject</h3>
+      <p data-i18n="feat1p">One graph, one chapter, one hard topic — ask for exactly the part you are stuck on. No full course needed.</p>
+    </div>
+    <div class="feature-card">
+      <span class="f-ic orange">🛡️</span>
+      <h3 data-i18n="feat2t">Pay first, risk-free</h3>
+      <p data-i18n="feat2p">Pay in advance by bKash. If there is any problem with your class, you get a full refund. Simple and safe.</p>
+    </div>
+    <div class="feature-card">
+      <span class="f-ic teal">🕒</span>
+      <h3 data-i18n="feat3t">At your time</h3>
+      <p data-i18n="feat3p">Tell the teacher when you are free. Morning, evening or late night — the class happens when it suits you.</p>
+    </div>
+  </section>
 
-<section id="teacher"><h2 style="color:var(--teal-dark)">Teacher</h2>
-<div class="grid"><div class="card teal"><h3>Wallet</h3><p>Balance: <b id="wBalance">BDT 0</b></p>
-<div id="wEntries"></div><div class="row"><div><label>Withdraw amount (BDT)</label><input id="wAmt" type="number" min="1"></div></div>
-<p><button class="btn btn-teal" id="wBtn">Withdraw</button></p><div class="msg" id="wMsg"></div></div>
-<div class="card teal"><h3>Requests to Me / Feedback</h3><div id="teacherReqs"></div>
-<h3>Evaluation / Feedback</h3><label>GID</label><input id="fGid">
-<label>Comment</label><textarea id="fComment"></textarea>
-<label>Ranking</label><div class="stars" id="fStars"><span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span></div>
-<label>Complain</label><textarea id="fComplain"></textarea>
-<p><button class="btn btn-red" id="fBtn">Submit Feedback</button></p><div class="msg" id="fMsg"></div></div></div></section>
+  <!-- HOW IT WORKS -->
+  <section id="how" class="section">
+    <div class="wrap split">
+      <div class="split-art"><img src="/images/student.webp" alt="Student learning online at home"></div>
+      <div class="split-text">
+        <p class="eyebrow" data-i18n="howEyebrow">— How it works</p>
+        <h2 data-i18n-html="howTitle">Three steps to your <span class="u-line">class</span>.</h2>
+        <div class="step"><span class="step-n">1</span><div><h3 data-i18n="step1t">Register once — free</h3><p data-i18n="step1p">One form for Teacher, Student and Others. Your detailed CV becomes your profile everywhere on the site.</p></div></div>
+        <div class="step"><span class="step-n">2</span><div><h3 data-i18n="step2t">Choose a teacher &amp; topic</h3><p data-i18n="step2p">Pick a teacher, write your level, subject, chapter and the exact topic, and choose your hours and time.</p></div></div>
+        <div class="step"><span class="step-n">3</span><div><h3 data-i18n="step3t">Pay &amp; join the class</h3><p data-i18n="step3p">Confirm payment, follow your class status — Pending → Confirm → Ongoing → Done — and join with the class link.</p></div></div>
+        <a class="btn btn-primary" href="#register" data-i18n="startNow">Start now →</a>
+      </div>
+    </div>
+  </section>
 
-<section id="people"><h2>Registered People (Admin)</h2><div class="card">
-<p id="peopleCounts"></p><div style="overflow:auto"><table><thead><tr><th>ID</th><th>Role</th><th>Name</th><th>Email</th><th>Education</th><th>University</th><th>Profession</th><th>Experience</th><th>Subscription</th></tr></thead><tbody id="peopleBody"></tbody></table></div>
-<p><button class="btn btn-ghost btn-sm" id="refreshPeople">Refresh</button></p></div></section>
+  <!-- FIND A TEACHER / STUDENT -->
+  <section id="student" class="section grey">
+    <div class="wrap">
+      <p class="eyebrow center" data-i18n="studentEyebrow">— For Students</p>
+      <h2 class="center" data-i18n-html="findTitle">Find your <span class="u-line">teacher</span>.</h2>
+      <p class="sub center" data-i18n-html="findSub">Fill in what you need help with, then tap <b>Request</b> on a teacher below. You must be signed in to send a request.</p>
+
+      <div class="card request-card">
+        <h3 data-i18n="reqCardTitle">What do you need help with?</h3>
+        <div class="row">
+          <div><label data-i18n="lblLevel">Level</label><input id="qLevel" value="Honors"></div>
+          <div><label data-i18n="lblSubject">Subject</label><input id="qSubject" value="Statistics+Excel"></div>
+        </div>
+        <div class="row">
+          <div><label data-i18n="lblChapter">Chapter</label><input id="qChapter" value="Graphs in Excel"></div>
+          <div><label data-i18n="lblTopic">Topic</label><input id="qTopic" value="Bar Chart, Pie Chart, Scatter Plot"></div>
+        </div>
+        <div class="row">
+          <div><label data-i18n="lblHours">Hours</label><input id="qHours" type="number" value="1" min="1"></div>
+          <div><label data-i18n="lblYourTime">Your available time</label><input id="qTime" data-i18n-ph="phTime" placeholder="Today 7pm"></div>
+        </div>
+        <p class="total-line"><span data-i18n="estTotal">Estimated total:</span> <b id="qTotal">BDT 500</b> <span class="muted" data-i18n="estNote">(final amount uses your teacher's own rate)</span></p>
+        <div class="msg" id="reqMsg"></div>
+      </div>
+
+      <h3 class="list-title" data-i18n="teachersTitle">Our teachers</h3>
+      <div class="grid" id="teacherList"></div>
+
+      <h3 class="list-title" data-i18n="myReqTitle">My requests</h3>
+      <div id="myRequests"></div>
+    </div>
+  </section>
+
+  <!-- STATS -->
+  <section class="stats">
+    <div class="wrap">
+      <h2 data-i18n="statsTitle">A growing learning community in Bangladesh</h2>
+      <div class="stats-row">
+        <div class="stat"><b id="statTeachers">–</b><span data-i18n="statTeachers">Registered teachers</span></div>
+        <div class="stat"><b id="statStudents">–</b><span data-i18n="statStudents">Registered students</span></div>
+        <div class="stat"><b id="statTotal">–</b><span data-i18n="statTotal">Total members</span></div>
+        <div class="stat"><b>500</b><span data-i18n="statRate">BDT/hour starting rate</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WHY / ABOUT -->
+  <section class="section">
+    <div class="wrap split rev">
+      <div class="split-text">
+        <p class="eyebrow" data-i18n="whyEyebrow">— Why microedu.com</p>
+        <h2 data-i18n-html="whyTitle">Real teachers, real <span class="u-line">CVs</span>, real classes.</h2>
+        <p class="sub" data-i18n="whySub">Every member registers with a detailed CV — education, university, experience, speciality and subjects. What you see on a teacher's card is exactly what they registered with.</p>
+        <ul class="ticks">
+          <li data-i18n="tick1">Detailed CV behind every teacher profile</li>
+          <li data-i18n="tick2">Clear status on every class: Pending → Confirm → Ongoing → Done</li>
+          <li data-i18n="tick3">Teachers earn in their wallet and withdraw anytime</li>
+          <li data-i18n="tick4">Students rate, review and can complain after class</li>
+        </ul>
+        <a class="btn btn-primary" href="#student" data-i18n="meetTeachers">Meet the teachers →</a>
+      </div>
+      <div class="split-art"><img src="/images/teacher.webp" alt="Teacher giving an online class"></div>
+    </div>
+  </section>
+
+  <!-- SUBSCRIPTION -->
+  <section id="subscription" class="section grey">
+    <div class="wrap">
+      <p class="eyebrow center" data-i18n="subEyebrow">— Subscription</p>
+      <h2 class="center" data-i18n-html="subTitle">Simple plans for <span class="u-line">everyone</span>.</h2>
+      <p class="sub center" data-i18n="subSubText">Plans depend on your role. Choose a duration of 1, 3, 6 or 12 months. Status starts Pending — confirm to activate.</p>
+      <div class="plans">
+        <div class="plan-card"><h3 data-i18n="roleTeacher">Teacher</h3><p class="price">BDT 300–500<span data-i18n="perMonth">/month</span></p><p data-i18n="teacherPlansText">Teacher Basic BDT 300 · Teacher Plus BDT 500</p></div>
+        <div class="plan-card hot"><span class="hot-tag" data-i18n="popular">Popular</span><h3 data-i18n="roleStudent">Student</h3><p class="price">BDT 200–300<span data-i18n="perMonth">/month</span></p><p data-i18n="studentPlansText">Student Basic BDT 200 · Student Plus BDT 300</p></div>
+        <div class="plan-card"><h3 data-i18n="roleOther">Other</h3><p class="price">BDT 200–300<span data-i18n="perMonth">/month</span></p><p data-i18n="otherPlansText">Other Basic BDT 200 · Other Plus BDT 300</p></div>
+      </div>
+      <div class="card narrow">
+        <div class="row">
+          <div><label data-i18n="lblPlan">Plan (for your role)</label><select id="subPlan"></select></div>
+          <div><label data-i18n="lblDuration">Duration (months)</label><select id="subMonths"><option>1</option><option>3</option><option>6</option><option>12</option></select></div>
+        </div>
+        <p><button class="btn btn-primary" id="subBtn" data-i18n="subscribeBtn">Subscribe</button></p>
+        <div id="subList"></div>
+        <div class="msg" id="subMsg"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- JOIN AS TEACHER -->
+  <section class="section">
+    <div class="wrap split">
+      <div class="split-art"><img src="/images/group.webp" alt="Bangladeshi students learning together"></div>
+      <div class="split-text">
+        <p class="eyebrow" data-i18n="joinEyebrow">— Join us as a teacher</p>
+        <h2 data-i18n-html="joinTitle">Teach what you know.<br>Get <span class="u-line">paid</span> for it.</h2>
+        <p class="sub" data-i18n="joinSub">Register with your detailed CV, set your own hourly rate, and receive class requests from students across Bangladesh. Your earnings collect in your wallet — withdraw whenever you like.</p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="#register" data-i18n="regTeacherBtn">Register as a Teacher →</a>
+          <a class="btn btn-white" href="#how" data-i18n="navHow">How it works</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- REGISTER -->
+  <section id="register" class="section grey">
+    <div class="wrap">
+      <p class="eyebrow center" data-i18n="regEyebrow">— Registration</p>
+      <h2 class="center" data-i18n-html="regTitle">One form for <span class="u-line">everyone</span>.</h2>
+      <p class="sub center" data-i18n="regSub">Teacher, Student or Other — one registration is enough. Your detailed CV is mandatory: it powers your profile, teacher card, requests, wallet and subscription.</p>
+      <div class="card narrow">
+        <div class="rolepick" id="rolePick">
+          <button type="button" data-role="Teacher">👩‍🏫 <span data-i18n="roleTeacher">Teacher</span></button>
+          <button type="button" data-role="Student" class="sel">🎒 <span data-i18n="roleStudent">Student</span></button>
+          <button type="button" data-role="Other">👤 <span data-i18n="roleOther">Other</span></button>
+        </div>
+        <form id="regForm">
+          <input type="hidden" id="regRole" value="Student">
+          <div class="row"><div><label data-i18n="lblFullName">Full name *</label><input id="rName" required data-i18n-ph="phName" placeholder="Your full name"></div>
+          <div><label data-i18n="lblEmail">Email *</label><input id="rEmail" type="email" required data-i18n-ph="phEmail" placeholder="you@example.com"></div></div>
+          <div class="row"><div><label data-i18n="lblPassword">Password *</label><input id="rPass" type="password" required data-i18n-ph="phPass" placeholder="Choose a password"></div>
+          <div><label data-i18n="lblPassword2">Retype password *</label><input id="rPass2" type="password" required data-i18n-ph="phPass2" placeholder="Same password again"></div></div>
+          <div class="row"><div><label data-i18n="lblPhone">Phone</label><input id="rPhone" data-i18n-ph="phPhone" placeholder="01XXXXXXXXX"></div>
+          <div><label data-i18n="lblMobile">Mobile</label><input id="rMobile" data-i18n-ph="phPhone" placeholder="01XXXXXXXXX"></div></div>
+
+          <label data-i18n="photoQ">How do you want to appear?</label>
+          <div class="optgroup" id="photoModeGroup">
+            <label><input type="radio" name="photoMode" value="personal" checked><span class="opt"><span data-i18n="photoPersonal">My photo</span><small data-i18n="photoPersonalSub">Your own profile photo</small></span></label>
+            <label><input type="radio" name="photoMode" value="group"><span class="opt"><span data-i18n="photoGroup">Group photo</span><small data-i18n="photoGroupSub">For a group / team</small></span></label>
+            <label><input type="radio" name="photoMode" value="anonymous"><span class="opt"><span data-i18n="photoAnon">Anonymous</span><small data-i18n="photoAnonSub">Name &amp; photo stay hidden</small></span></label>
+          </div>
+          <div class="row">
+            <div><label data-i18n="lblPhoto">Photo</label><input id="rPhotoFile" type="file" accept="image/*"><img id="photoPreview" class="photo-preview" alt=""></div>
+            <div><label data-i18n="lblGroupName">Group name (if group photo)</label><input id="rGroupName" data-i18n-ph="phGroupName" placeholder="e.g. Dhaka Study Circle"></div>
+          </div>
+
+          <h3 class="cv-title"><span data-i18n="cvTitle">Your detailed CV</span> <span class="muted" data-i18n="mandatory">(mandatory)</span></h3>
+          <div class="row"><div><label data-i18n="lblEducation">Education *</label><input id="cEducation" required data-i18n-ph="phEducation" placeholder="Masters Completed / Honors Completed"></div>
+          <div><label data-i18n="lblUniversity">University / Institution *</label><input id="cUniversity" required data-i18n-ph="phUniversity" placeholder="University of Dhaka"></div></div>
+          <div class="row"><div><label data-i18n="lblProfession">Profession *</label><input id="cProfession" required data-i18n-ph="phProfession" placeholder="Teacher / Student / Engineer"></div>
+          <div><label data-i18n="lblPosition">Position</label><input id="cPosition" data-i18n-ph="phPosition" placeholder="Lecturer, SSC candidate…"></div></div>
+          <div class="row"><div><label data-i18n="lblExperience">Experience *</label><input id="cExperience" required data-i18n-ph="phExperience" placeholder="5 years teaching"></div>
+          <div><label data-i18n="lblSpeciality">Speciality / Skills *</label><input id="cSpeciality" required data-i18n-ph="phSpeciality" placeholder="Statistics, Excel, English"></div></div>
+          <div class="row"><div><label data-i18n="lblSubjects">Subjects *</label><input id="cSubjects" required data-i18n-ph="phSubjects" placeholder="Statistics, Excel"></div>
+          <div><label data-i18n="lblLevelCv">Level *</label><input id="cLevel" required data-i18n-ph="phLevelCv" placeholder="Honors / HSC / SSC"></div></div>
+          <div class="row"><div><label data-i18n="lblAddress">Address *</label><input id="cAddress" required data-i18n-ph="phAddress" placeholder="District, Division"></div>
+          <div><label data-i18n="lblAvail">Daily available time</label><input id="cAvail" data-i18n-ph="phAvail" placeholder="6pm – 10pm"></div></div>
+          <div class="row"><div><label data-i18n="lblPricing">How will you charge?</label><select id="cPricing"><option value="hourly" data-i18n="priceHourly">Hourly rate</option><option value="bidding" data-i18n="priceBidding">Bidding (students offer a price)</option><option value="free" data-i18n="priceFree">Free service</option></select></div>
+          <div><label id="cRateLabel" data-i18n="lblRate">Rate (BDT / hour)</label><input id="cRate" type="number" value="500" min="0"></div></div>
+          <label data-i18n="lblExpTime">Expertise-wise time</label><textarea id="cExpTime" rows="2" data-i18n-ph="phExpTime" placeholder="Statistics: Sat–Thu 6–8pm · Excel: Friday 10am–12pm"></textarea>
+          <div><label data-i18n="lblCvFile">CV file (file name is stored)</label><input id="cFile" type="file"></div>
+          <p><button class="btn btn-primary btn-lg" type="submit" data-i18n="regSubmit">Register — it's free</button></p>
+          <div class="msg" id="regMsg"></div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- DASHBOARD -->
+  <section id="signin" class="section">
+    <div class="wrap">
+      <p class="eyebrow center" data-i18n="dashEyebrow">— My Dashboard</p>
+      <h2 class="center" data-i18n-html="dashTitle">Welcome <span class="u-line">back</span>.</h2>
+      <div class="card narrow">
+        <form id="signForm">
+          <div class="row"><div><label data-i18n="lblEmail">Email</label><input id="sEmail" type="email" required data-i18n-ph="phEmail" placeholder="you@example.com"></div>
+          <div><label data-i18n="lblPassword">Password</label><input id="sPass" type="password" required data-i18n-ph="phYourPass" placeholder="Your password"></div></div>
+          <p><button class="btn btn-primary" type="submit" data-i18n="signInBtn">Sign In</button>
+          <button class="btn btn-ghost" type="button" id="signOut" data-i18n="signOutBtn">Sign Out</button></p>
+          <div class="msg" id="signMsg"></div>
+        </form>
+        <div id="profileBox" class="hidden">
+          <h3 data-i18n="myProfile">My profile (from my CV)</h3>
+          <div id="profileContent"></div>
+        </div>
+      </div>
+
+      <div class="grid two">
+        <div class="card">
+          <h3>💼 <span data-i18n="walletTitle">My wallet</span> <span class="muted" data-i18n="forTeachers">(teachers)</span></h3>
+          <p class="wallet-bal"><span data-i18n="lblBalance">Balance:</span> <b id="wBalance">BDT 0</b></p>
+          <div id="wEntries"></div>
+          <div class="row"><div><label data-i18n="lblWithdrawAmt">Withdraw amount (BDT)</label><input id="wAmt" type="number" min="1" placeholder="500"></div></div>
+          <p><button class="btn btn-primary" id="wBtn" data-i18n="withdrawBtn">Withdraw</button></p>
+          <div class="msg" id="wMsg"></div>
+        </div>
+        <div class="card">
+          <h3>📩 <span data-i18n="reqToMeTitle">Requests to me</span> <span class="muted" data-i18n="forTeachers">(teachers)</span></h3>
+          <div id="teacherReqs"></div>
+          <h3 class="cv-title" data-i18n="feedbackTitle">⭐ Evaluation / Feedback</h3>
+          <label data-i18n="lblGid">Class GID</label><input id="fGid" placeholder="XXXX-XXX-XXX">
+          <label data-i18n="lblComment">Comment</label><textarea id="fComment" rows="2" data-i18n-ph="phComment" placeholder="How was the class?"></textarea>
+          <label data-i18n="lblRanking">Ranking</label>
+          <div class="stars" id="fStars"><span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span></div>
+          <label data-i18n="lblComplain">Complain</label><textarea id="fComplain" rows="2" data-i18n-ph="phComplain" placeholder="Any problem? Tell us — full refund if there is a problem"></textarea>
+          <p><button class="btn btn-orange" id="fBtn" data-i18n="feedbackBtn">Submit Feedback</button></p>
+          <div class="msg" id="fMsg"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PEOPLE -->
+  <section id="people" class="section grey">
+    <div class="wrap">
+      <p class="eyebrow center" data-i18n="peopleEyebrow">— Community</p>
+      <h2 class="center" data-i18n-html="peopleTitle">Registered <span class="u-line">people</span>.</h2>
+      <div class="card">
+        <p id="peopleCounts" class="counts"></p>
+        <div class="table-scroll"><table>
+          <thead><tr><th data-i18n="thId">ID</th><th data-i18n="thRole">Role</th><th data-i18n="thName">Name</th><th data-i18n="thEmail">Email</th><th data-i18n="thEducation">Education</th><th data-i18n="thUniversity">University</th><th data-i18n="thProfession">Profession</th><th data-i18n="thExperience">Experience</th><th data-i18n="thSubscription">Subscription</th></tr></thead>
+          <tbody id="peopleBody"></tbody>
+        </table></div>
+        <p><button class="btn btn-ghost btn-sm" id="refreshPeople" data-i18n="refreshBtn">Refresh</button></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta">
+    <div class="wrap cta-in">
+      <div>
+        <h2 data-i18n="ctaTitle">Your next class is one topic away.</h2>
+        <p data-i18n="ctaSub">Tell us the exact part you are stuck on — a teacher will take it from there.</p>
+      </div>
+      <a class="btn btn-white btn-lg" href="#register" data-i18n="ctaBtn">Join microedu.com — Free</a>
+    </div>
+  </section>
+
 </main>
-<footer>D2D microedu.com — Micro Edu. Support · Payment in advance by bKash · Full refund if there is a problem</footer>
+
+<footer>
+  <div class="wrap foot">
+    <div class="foot-col">
+      <a class="brand light" href="#top"><img src="/logo.svg" alt="" class="brand-mark"><span class="brand-name">micro<span class="b-teal">edu</span><span class="b-orange">.com</span></span></a>
+      <p data-i18n="footAbout">Micro Edu. Support — direct online tuition support on any part of any subject, at any time, from verified teachers across Bangladesh.</p>
+    </div>
+    <div class="foot-col">
+      <h4 data-i18n="footExplore">Explore</h4>
+      <a href="#how" data-i18n="navHow">How it works</a>
+      <a href="#student" data-i18n="navFind">Find a Teacher</a>
+      <a href="#subscription" data-i18n="navSub">Subscription</a>
+      <a href="#register" data-i18n="regLink">Registration</a>
+      <a href="#people" data-i18n="navPeople">Registered People</a>
+    </div>
+    <div class="foot-col">
+      <h4 data-i18n="footKnow">Good to know</h4>
+      <p data-i18n="know1">💳 Payment in advance by bKash</p>
+      <p data-i18n="know2">🛡️ Full refund if there is a problem</p>
+      <p data-i18n="know3">📍 Dhaka, Bangladesh</p>
+      <p data-i18n="know4">🕒 Support at your available time</p>
+    </div>
+  </div>
+  <div class="foot-bar wrap"><span data-i18n="footCopy">© 2026 microedu.com — Micro Edu. Support</span><span data-i18n="footTag">Teacher · Student · Other — one registration for all</span></div>
+</footer>
+
 <script src="/app.js"></script>
-</body></html>
+</body>
+</html>

@@ -1,4 +1,4 @@
-# D2D microedu.com — Cloudflare Workers configuration
+# microedu.com — Cloudflare Workers configuration
 # Deploy guide: docs/CLOUDFLARE.md
 #
 # Before deploying, replace database_id below with the real ID of the

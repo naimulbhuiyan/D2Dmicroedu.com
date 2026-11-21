@@ -1,4 +1,4 @@
--- D2D microedu.com — Production relational schema (PostgreSQL)
+-- microedu.com — Production relational schema (PostgreSQL)
 -- MySQL adaptation: replace SERIAL with INT AUTO_INCREMENT, BOOLEAN with TINYINT(1),
 -- TIMESTAMPTZ with TIMESTAMP DEFAULT CURRENT_TIMESTAMP, and TEXT stays TEXT.
 -- One database for ALL registered people. Everything links by person_id / GID.
@@ -11,6 +11,9 @@ CREATE TABLE IF NOT EXISTS registered_people (
   phone TEXT, mobile TEXT,
   password_hash TEXT NOT NULL, -- scrypt hash, never plain text
   picture TEXT,
+  photo_data TEXT,
+  photo_mode TEXT DEFAULT 'personal',
+  group_name TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_people_role ON registered_people(role);
@@ -25,6 +28,8 @@ CREATE TABLE IF NOT EXISTS cv_details (
   subjects TEXT NOT NULL, level TEXT NOT NULL,
   address TEXT NOT NULL, available_time TEXT,
   rate_bdt_per_hour NUMERIC NOT NULL DEFAULT 500,
+  pricing_type TEXT DEFAULT 'hourly',
+  expertise_time TEXT,
   cv_file_name TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_cv_person ON cv_details(person_id);

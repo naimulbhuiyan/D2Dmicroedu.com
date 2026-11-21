@@ -40,7 +40,7 @@ Manual alternative — create the tables yourself in the D1 Console:
 ## Step 4 — Import this repository as a Worker
 1. Dashboard → **Workers & Pages** → **Create** → **Import a repository**
    (Workers → Import Git repository).
-2. Connect GitHub and select **`naimulbhuiyan/D2Dmicroedu.com`** (branch `main`).
+2. Connect GitHub and select **`naimulbhuiyan/microedu.com`** (branch `main`).
 3. Project/Worker name: `d2d-microedu`. Build/deploy settings: this repo's
    `wrangler.toml` already declares the entry point (`cloudflare/worker.js`)
    and the assets directory (`./public`), so the defaults detected from it
@@ -60,7 +60,7 @@ The Worker reads its database from the binding named **`DB`**
 
 ## Step 6 — Verify
 1. Open the live URL: `https://d2d-microedu.<your-subdomain>.workers.dev`
-   — the homepage should show **D2D microedu.com** with Registration,
+   — the homepage should show **microedu.com** with Registration,
    Sign In, Subscription, Student and Teacher sections.
 2. Open `<live URL>/api/people` — it should return JSON like
    `{"counts":{"Teacher":0,"Student":0,"Other":0},"total":0,"people":[]}`

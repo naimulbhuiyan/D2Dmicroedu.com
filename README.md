@@ -1,4 +1,4 @@
-# D2D microedu.com
+# microedu.com
 
 Micro Edu. Support — an online, on-demand tuition platform built from the Web View wireframes.
 Students request direct help on any part of any subject; teachers accept, get paid in advance (bKash), and teach via a class link.

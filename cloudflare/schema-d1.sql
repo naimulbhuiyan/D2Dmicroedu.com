@@ -1,4 +1,4 @@
--- D2D microedu.com — Relational schema for Cloudflare D1 (SQLite dialect)
+-- microedu.com — Relational schema for Cloudflare D1 (SQLite dialect)
 -- Same tables/relationships as database/schema.sql (PostgreSQL) and the
 -- embedded schema in server/server.js. One database for ALL registered
 -- people. Everything links by person_id / GID.
@@ -12,6 +12,9 @@ CREATE TABLE IF NOT EXISTS registered_people (
   phone TEXT, mobile TEXT,
   password_hash TEXT NOT NULL, -- PBKDF2 hash (Web Crypto), never plain text
   picture TEXT,
+  photo_data TEXT,
+  photo_mode TEXT DEFAULT 'personal',
+  group_name TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_people_role ON registered_people(role);
@@ -26,6 +29,8 @@ CREATE TABLE IF NOT EXISTS cv_details (
   subjects TEXT NOT NULL, level TEXT NOT NULL,
   address TEXT NOT NULL, available_time TEXT,
   rate_bdt_per_hour REAL NOT NULL DEFAULT 500,
+  pricing_type TEXT DEFAULT 'hourly',
+  expertise_time TEXT,
   cv_file_name TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_cv_person ON cv_details(person_id);

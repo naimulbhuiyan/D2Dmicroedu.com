@@ -1,1 +1,1 @@
-{"description":"D2D microedu.com - online on-demand tuition platform (Web View spec)","engines":{"node":">=22"},"license":"UNLICENSED","main":"server/server.js","name":"d2d-microedu","private":true,"scripts":{"start":"node server/server.js"},"type":"commonjs","version":"1.0.0"}
+{"description":"microedu.com - online on-demand tuition platform (Web View spec)","engines":{"node":">=22"},"license":"UNLICENSED","main":"server/server.js","name":"microedu","private":true,"scripts":{"start":"node server/server.js"},"type":"commonjs","version":"1.0.0"}

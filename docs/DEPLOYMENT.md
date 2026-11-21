@@ -1,4 +1,4 @@
-# Deployment — D2D microedu.com
+# Deployment — microedu.com
 
 The app is a zero-dependency Node server (`server/server.js`) with a static frontend.
 For production handling many student connections, use a managed host + PostgreSQL
