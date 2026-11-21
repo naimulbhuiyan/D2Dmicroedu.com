@@ -9,7 +9,7 @@
 
 /* One plan list for every member — there are no roles anymore. Prices keep
    the earlier price points (Basic 200, Plus 300, Teacher Plus 500 / month). */
-const PLANS = { 'Basic': 200, 'Plus': 300, 'Teacher Plus': 500 };
+const PLANS = { 'Basic': 0, 'Plus': 300, 'Teacher Plus': 500 };
 
 /* ---------- database schema (embedded copy of cloudflare/schema-d1.sql) ----------
    Lets the Worker initialise its own D1 database (see /api/init-db and the

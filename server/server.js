@@ -48,7 +48,7 @@ const verifyPw = (pw, stored) => { try { const [s, h] = stored.split(':'); retur
 const gid = () => [1000,100,100].map((m,i)=> Math.floor(Math.random()*9000*(i?0.111:1)) + (i?100:1000)).join('-').replace(/(\d{4})-(\d{3})-(\d{3})/,'$1-$2-$3');
 const newGid = () => { let g; do { g = `${1000+Math.floor(Math.random()*9000)}-${100+Math.floor(Math.random()*900)}-${100+Math.floor(Math.random()*900)}`; } while (db.prepare('SELECT 1 FROM tuition_requests WHERE gid=?').get(g)); return g; };
 /* One plan list for every member — there are no roles anymore. */
-const PLANS = { 'Basic': 200, 'Plus': 300, 'Teacher Plus': 500 };
+const PLANS = { 'Basic': 0, 'Plus': 300, 'Teacher Plus': 500 };
 
 function send(res, code, obj) { const b = JSON.stringify(obj); res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(b); }
 function body(req) { return new Promise(r => { let d=''; req.on('data',c=>d+=c); req.on('end',()=>{ try{r(JSON.parse(d||'{}'))}catch{r({})} }); }); }

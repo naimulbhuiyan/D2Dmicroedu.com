@@ -203,9 +203,9 @@ function renderTeacherCard(t, suggested = false) {
     <div class="t-head">${avatarHtml(t)}<div><h3>${esc(displayName(t))}</h3><small>${esc(t.cv?.profession || '')}${t.cv?.university ? ' · ' + esc(t.cv.university) : ''}</small></div></div>
     <p class="t-meta">${esc(t.cv?.education || '')} · ${esc(t.cv?.experience || '')}${t.cv?.speciality ? '<br>Speciality: ' + esc(t.cv.speciality) : ''}</p>
     ${matchNote}
-    <div class="chips">${subjects.map(s => `<span class="chip">${esc(s)}</span>`).join('')}${priceChip(t.cv)}${teacherPricing[t.id].acceptsTime ? '<span class="chip time-ex">⏳ Accepts time exchange</span>' : ''}</div>
+    <div class="chips">${subjects.map(s => `<span class="chip">${esc(s)}</span>`).join('')}${teacherPricing[t.id].acceptsTime ? '<span class="chip time-ex">⏳ Accepts time exchange</span>' : ''}</div>
     ${t.cv?.available_time || t.cv?.expertise_time ? `<p class="t-meta">🕒 ${esc(t.cv.expertise_time || t.cv.available_time)}</p>` : ''}
-    <div class="t-foot"><span class="rate">${esc(priceText(t.cv))}</span><button class="btn btn-primary btn-sm" onclick="requestTeacher(${t.id})">Request</button></div>
+    <div class="t-foot"><span class="muted">Rate shared after you request</span><button class="btn btn-primary btn-sm" onclick="requestTeacher(${t.id})">Request</button></div>
   </div>`;
 }
 async function loadTeachers() {
@@ -331,7 +331,7 @@ loadAll();
    and teacher cards stay in English in this version. */
 const BN = {
   announce: 'আগাম পেমেন্ট করুন <b>bKash</b>-এ &nbsp;·&nbsp; কোনো সমস্যা হলে সম্পূর্ণ টাকা ফেরত &nbsp;·&nbsp; যেকোনো বিষয়ের যেকোনো অংশে সাহায্য, যেকোনো সময়',
-  navHow: 'কীভাবে কাজ করে', navFind: 'শিক্ষক খুঁজুন', navSub: 'সাবস্ক্রিপশন', navPeople: 'নিবন্ধিত সদস্য', navHelp: 'আমার সাহায্য লাগবে',
+  navHow: 'কীভাবে কাজ করে', navFind: 'আমাদের শিক্ষকগণ', navSub: 'সাবস্ক্রিপশন', navPeople: 'নিবন্ধিত সদস্য', navHelp: 'আমার সাহায্য লাগবে',
   helpEyebrow: '— আমার সাহায্য লাগবে', helpTitle: 'কোথায় <span class="u-line">আটকে</span> আছেন বলুন।',
   helpSub: 'আপনার লেভেল, বিষয় আর নির্দিষ্ট টপিক লিখুন। microedu মিলিয়ে শিক্ষক সাজেস্ট করবে — তারপর রিকোয়েস্ট পাঠান microedu-র কাছে, আমরা দুই পক্ষ থেকে ফাইনাল করে আপনার মিটিং আয়োজন করে দেব। তার আগে কোনো সরাসরি যোগাযোগ নেই।',
   suggestBtn: '✨ আমার জন্য শিক্ষক সাজেস্ট করুন', suggestTitle: 'আপনার জন্য সাজেস্ট করা',
@@ -343,12 +343,15 @@ const BN = {
   timeBankTitle: 'আমার টাইম ব্যাংক', lblTimeBalance: 'টাইম ক্রেডিট:',
   timeBankNote: 'ফ্রি ক্লাস পড়ালেই সেই সময় এখানে জমবে। যেসব শিক্ষক টাইম এক্সচেঞ্জে রাজি, তাদের কাছে এই ক্রেডিট দিয়ে শিখতে পারবেন।',
   basicPlanText: 'শেখা শুরু করা শিক্ষার্থীদের জন্য', plusPlanText: 'নিয়মিত শিক্ষার্থী ও নতুন শিক্ষকদের জন্য', teacherPlusText: 'যেসব শিক্ষক নিয়মিত পড়ান তাদের জন্য',
+  bf1: 'রেজিস্টার করে প্রোফাইল তৈরি করুন', bf2: 'সাহায্যের রিকোয়েস্ট পাঠান ও লাইভ ক্লাসে যোগ দিন', bf3: 'ফ্রি পড়ান ও টাইম ক্রেডিট আয় করুন', bf4: 'পেইড ক্লাসে সম্পূর্ণ টাকা ফেরতের সুরক্ষা',
+  pf1: 'বেসিকের সবকিছু', pf2: 'অগ্রাধিকার ভিত্তিতে শিক্ষক সাজেশন', pf3: 'অগ্রাধিকার ভিত্তিতে ক্লাসের ব্যবস্থা', pf4: 'শিক্ষক তালিকায় ফিচার্ড প্রোফাইল',
+  tf1: 'প্লাসের সবকিছু', tf2: 'সাজেশনে সবার উপরে স্থান', tf3: 'প্রোফাইলে টিচার প্লাস ব্যাজ', tf4: 'অগ্রাধিকার ভিত্তিতে ওয়ালেট উত্তোলন',
   signInBtn: 'সাইন ইন', joinFree: 'ফ্রি যোগ দিন',
   heroPill: '🎓 মাইক্রো এডু. সাপোর্ট — লাইভ ১-টু-১ অনলাইন টিউশন',
   heroTitle: 'একটা টপিকে আটকে গেছেন?<br>আসল শিক্ষকের কাছে <span class="u-line">লাইভ</span> শিখুন।',
   heroLead: 'একবার রেজিস্টার করুন, যাচাই করা শিক্ষক বেছে নিন, ঠিক কোন অধ্যায় বা টপিকে আটকে আছেন তা লিখুন — আর আপনার সময়ে লাইভ ক্লাসে যোগ দিন। যেকোনো বিষয়, যেকোনো লেভেল, বাংলাদেশের যেকোনো জায়গা থেকে।',
-  heroFind: 'শিক্ষক খুঁজুন →', heroJoinTeacher: 'শিক্ষক হিসেবে যোগ দিন',
-  heroP1: '✔ যাচাই করা শিক্ষকের সিভি', heroP2: '✔ ঘণ্টায় মাত্র ৫০০ টাকা থেকে', heroP3: '✔ সম্পূর্ণ টাকা ফেরতের গ্যারান্টি',
+  heroFind: 'আমাদের শিক্ষকগণ →', heroJoinTeacher: 'শিক্ষক হিসেবে যোগ দিন',
+  heroP1: '✔ যাচাই করা শিক্ষকের সিভি', heroP2: '✔ যেকোনো বিষয়, যেকোনো লেভেল', heroP3: '✔ সম্পূর্ণ টাকা ফেরতের গ্যারান্টি',
   fc1t: 'বিশ্বস্ত শিক্ষক', fc1s: 'প্রতিটি প্রোফাইলে বিস্তারিত সিভি',
   fc2t: 'লাইভ ক্লাসের লিংক', fc2s: 'Google Meet, আপনার সময়ে',
   feat1t: 'যেকোনো বিষয়ের যেকোনো অংশ', feat1p: 'একটা গ্রাফ, একটা অধ্যায়, একটা কঠিন টপিক — ঠিক যে অংশে আটকে আছেন সেটুকুই চান। পুরো কোর্স লাগবে না।',
@@ -359,8 +362,8 @@ const BN = {
   step2t: 'শিক্ষক ও টপিক বেছে নিন', step2p: 'একজন শিক্ষক বেছে নিন, আপনার লেভেল, বিষয়, অধ্যায় ও নির্দিষ্ট টপিক লিখুন, আর ঘণ্টা ও সময় ঠিক করুন।',
   step3t: 'পেমেন্ট করে ক্লাসে যোগ দিন', step3p: 'পেমেন্ট নিশ্চিত করুন, ক্লাসের স্ট্যাটাস দেখুন — Pending → Confirm → Ongoing → Done — আর ক্লাস লিংক দিয়ে যোগ দিন।',
   startNow: 'এখনই শুরু করুন →',
-  studentEyebrow: '— ছাত্রদের জন্য', findTitle: 'আপনার <span class="u-line">শিক্ষক</span> খুঁজুন।',
-  findSub: 'সব শিক্ষক দেখুন, অথবা উপরের <b>আমার সাহায্য লাগবে</b> অংশে আপনার টপিক অনুযায়ী সাজেশন নিন। <b>Request</b> চাপলেই আপনার রিকোয়েস্ট microedu-র কাছে যাবে।',
+  studentEyebrow: '— ছাত্রদের জন্য', findTitle: 'আমাদের <span class="u-line">শিক্ষকগণ</span>।',
+  findSub: 'উপরের <b>আমার সাহায্য লাগবে</b> অংশে আপনার টপিক জানান — microedu আপনার জন্য সঠিক শিক্ষক সাজেস্ট করে ক্লাসের ব্যবস্থা করবে। অথবা নিচে আমাদের শিক্ষকদের দেখে <b>Request</b> চাপুন। রিকোয়েস্ট পাঠালেই রেট জানানো হবে।',
   reqCardTitle: 'আপনার কীসে সাহায্য দরকার?',
   lblLevel: 'লেভেল', lblSubject: 'বিষয়', lblChapter: 'অধ্যায়', lblTopic: 'টপিক', lblHours: 'ঘণ্টা', lblYourTime: 'আপনার ফ্রি সময়',
   phTime: 'আজ সন্ধ্যা ৭টা', estTotal: 'আনুমানিক মোট:', estNote: '(চূড়ান্ত মূল্য নির্ভর করবে আপনার শিক্ষকের নিজের রেটের ওপর)',
@@ -381,7 +384,7 @@ const BN = {
   joinEyebrow: '— শিক্ষক হিসেবে যোগ দিন', joinTitle: 'যা জানেন তাই পড়ান।<br>আর <span class="u-line">আয়</span> করুন।',
   joinSub: 'এক মিনিটে ফ্রি রেজিস্টার করুন, তারপর ড্যাশবোর্ড থেকে শিক্ষক প্রোফাইল সম্পূর্ণ করুন। নিজের রেট নিজে ঠিক করুন — ঘণ্টা হিসেবে, বিডিংয়ে, অথবা সম্পূর্ণ ফ্রি। ফ্রি পড়ালে সময়টা জমবে আপনার টাইম ব্যাংকে, অন্য শিক্ষকের কাছে শেখার জন্য।',
   regTeacherBtn: 'শিক্ষক হিসেবে রেজিস্টার করুন →',
-  regEyebrow: '— রেজিস্ট্রেশন', regTitle: 'সবার জন্য একটি <span class="u-line">ফর্ম</span>।',
+  regEyebrow: '— রেজিস্ট্রেশন', regTitle: 'এখনই <span class="u-line">রেজিস্টার</span> করুন।',
   regSub: 'শুধু নাম, ইমেইল আর ফোন — এক মিনিটে রেজিস্টার করে এখনই শেখা শুরু করুন। ছাত্র/শিক্ষক আলাদা নয়। পড়াতে চাইলে পরে ড্যাশবোর্ড থেকে শিক্ষক প্রোফাইল সম্পূর্ণ করুন।',
   photoQ: 'আপনি কীভাবে দেখাতে চান?',
   photoPersonal: 'আমার ছবি', photoPersonalSub: 'আপনার নিজের প্রোফাইল ছবি',
@@ -423,7 +426,7 @@ const BN = {
   footAbout: 'মাইক্রো এডু. সাপোর্ট — বাংলাদেশজুড়ে যাচাই করা শিক্ষকদের কাছ থেকে যেকোনো বিষয়ের যেকোনো অংশে, যেকোনো সময় সরাসরি অনলাইন টিউশন সাপোর্ট।',
   footExplore: 'ঘুরে দেখুন', regLink: 'রেজিস্ট্রেশন', footKnow: 'জেনে রাখুন',
   know1: '💳 bKash-এ আগাম পেমেন্ট', know2: '🛡️ সমস্যা হলে সম্পূর্ণ টাকা ফেরত', know3: '📍 ঢাকা, বাংলাদেশ', know4: '🕒 আপনার ফ্রি সময়ে সাপোর্ট',
-  footCopy: '© ২০২৬ microedu.com — মাইক্রো এডু. সাপোর্ট', footTag: 'সবার জন্য একটি রেজিস্ট্রেশন — একই অ্যাকাউন্টে শিখুন ও পড়ান',
+  footCopy: '© ২০২৬ microedu.com — মাইক্রো এডু. সাপোর্ট', footTag: 'একই অ্যাকাউন্টে শিখুন ও পড়ান',
 };
 const i18nOriginals = [];
 function captureOriginals() {
