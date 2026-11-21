@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subscription Plans — microedu.com</title>
+<meta name="description" content="microedu.com — Micro Edu. Support. Get live 1-to-1 online tuition help on any part of any subject, from verified teachers in Bangladesh. Pay in advance by bKash, full refund if there is a problem.">
+<link rel="icon" type="image/svg+xml" href="/logo.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<div class="announce" data-i18n-html="announce">Pay in advance by <b>bKash</b> &nbsp;·&nbsp; Full refund if there is a problem &nbsp;·&nbsp; Help on any part of any subject, at any time</div>
+
+<header class="topbar">
+  <div class="wrap topbar-in">
+    <a class="brand" href="index.html" aria-label="microedu.com home">
+      <img src="/logo.svg" alt="" class="brand-mark">
+      <span class="brand-name">micro<span class="b-teal">edu</span><span class="b-orange">.com</span></span>
+    </a>
+    <nav class="nav">
+      <a href="help.html" data-i18n="navHelp">I Need Help</a>
+      <a href="teachers.html" data-i18n="navFind">Our Teachers</a>
+      <a href="plans.html" data-i18n="navSub">Subscription</a>
+    </nav>
+    <div class="top-actions">
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button type="button" id="langEn" class="sel">EN</button>
+        <button type="button" id="langBn">বাংলা</button>
+      </div>
+      <a class="btn btn-ghost" href="dashboard.html" data-i18n="signInBtn">Sign In</a>
+      <a class="btn btn-primary" href="register.html" data-i18n="joinFree">Join Free</a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- SUBSCRIPTION -->
+  <section id="subscription" class="section grey">
+    <div class="wrap">
+      <p class="eyebrow center" data-i18n="subEyebrow">— Subscription</p>
+      <h2 class="center" data-i18n-html="subTitle">Simple plans for <span class="u-line">everyone</span>.</h2>
+      <p class="sub center" data-i18n="subSubText">One plan list for every member — learn and teach from the same account. Choose a duration of 1, 3, 6 or 12 months. Status starts Pending — confirm to activate.</p>
+      <div class="plans">
+        <div class="plan-card"><h3>Basic</h3><p class="price">Free</p><p data-i18n="basicPlanText">For learners getting started</p><ul class="plan-feats"><li data-i18n="bf1">Register &amp; create your profile</li><li data-i18n="bf2">Send help requests &amp; join live classes</li><li data-i18n="bf3">Teach free &amp; earn time credits</li><li data-i18n="bf4">Full refund protection on paid classes</li></ul></div>
+        <div class="plan-card hot"><span class="hot-tag" data-i18n="popular">Popular</span><h3>Plus</h3><p class="price">BDT 300<span data-i18n="perMonth">/month</span></p><p data-i18n="plusPlanText">For regular learners &amp; new teachers</p><ul class="plan-feats"><li data-i18n="pf1">Everything in Basic</li><li data-i18n="pf2">Priority teacher suggestions</li><li data-i18n="pf3">Priority class arrangement</li><li data-i18n="pf4">Featured profile in the teachers list</li></ul></div>
+        <div class="plan-card"><h3>Teacher Plus</h3><p class="price">BDT 500<span data-i18n="perMonth">/month</span></p><p data-i18n="teacherPlusText">For teachers who teach often</p><ul class="plan-feats"><li data-i18n="tf1">Everything in Plus</li><li data-i18n="tf2">Top placement in suggestions</li><li data-i18n="tf3">Teacher Plus badge on your profile</li><li data-i18n="tf4">Priority wallet withdrawals</li></ul></div>
+      </div>
+      <div class="card narrow">
+        <div class="row">
+          <div><label data-i18n="lblPlan">Plan</label><select id="subPlan"></select></div>
+          <div><label data-i18n="lblDuration">Duration (months)</label><select id="subMonths"><option>1</option><option>3</option><option>6</option><option>12</option></select></div>
+        </div>
+        <p><button class="btn btn-primary" id="subBtn" data-i18n="subscribeBtn">Subscribe</button></p>
+        <div id="subList"></div>
+        <div class="msg" id="subMsg"></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <div class="foot-col">
+      <a class="brand light" href="index.html"><img src="/logo.svg" alt="" class="brand-mark"><span class="brand-name">micro<span class="b-teal">edu</span><span class="b-orange">.com</span></span></a>
+      <p data-i18n="footAbout">Micro Edu. Support — direct online tuition support on any part of any subject, at any time, from verified teachers across Bangladesh.</p>
+    </div>
+    <div class="foot-col">
+      <h4 data-i18n="footExplore">Explore</h4>
+      <a href="index.html#how" data-i18n="navHow">How it works</a>
+      <a href="teachers.html" data-i18n="navFind">Our Teachers</a>
+      <a href="plans.html" data-i18n="navSub">Subscription</a>
+      <a href="register.html" data-i18n="regLink">Registration</a>
+      <a href="teachers.html#people" data-i18n="navPeople">Registered People</a>
+    </div>
+    <div class="foot-col">
+      <h4 data-i18n="footKnow">Good to know</h4>
+      <p data-i18n="know1">💳 Payment in advance by bKash</p>
+      <p data-i18n="know2">🛡️ Full refund if there is a problem</p>
+      <p data-i18n="know3">📍 Dhaka, Bangladesh</p>
+      <p data-i18n="know4">🕒 Support at your available time</p>
+    </div>
+  </div>
+  <div class="foot-bar wrap"><span data-i18n="footCopy">© 2026 microedu.com — Micro Edu. Support</span><span data-i18n="footTag">Learn and teach from the same account</span></div>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>

@@ -133,6 +133,10 @@ const routes = {
     db.prepare('INSERT INTO sessions(token,person_id) VALUES(?,?)').run(token,p.id);
     send(res,200,{found:true, person:pub(p), cv:cvOf(p.id), token});
   },
+  'GET /api/me': (req,res) => {
+    const me = auth(req); if (!me) return send(res,401,{error:'Sign in required'});
+    send(res,200,{person:pub(me), cv:cvOf(me.id)});
+  },
   'GET /api/people': (req,res) => {
     const people = db.prepare('SELECT * FROM registered_people ORDER BY id').all().map(p => ({...pubPublic(p), cv:cvOf(p.id), subscription: db.prepare("SELECT * FROM subscriptions WHERE person_id=? ORDER BY id DESC LIMIT 1").get(p.id)||null }));
     const teachersCount = db.prepare('SELECT COUNT(*) c FROM cv_details WHERE teacher_ready=1').get().c;

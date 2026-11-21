@@ -394,6 +394,12 @@ const routes = {
     return send({ found: true, person: pub(p), cv: await cvOf(db, p.id), token }, 200);
   },
 
+  'GET /api/me': async (request, db) => {
+    const me = await auth(request, db);
+    if (!me) return send({ error: 'Sign in required' }, 401);
+    return send({ person: pub(me), cv: await cvOf(db, me.id) }, 200);
+  },
+
   'GET /api/people': async (request, db) => {
     const rows = (await db.prepare('SELECT * FROM registered_people ORDER BY id').all()).results;
     const people = [];

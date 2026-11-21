@@ -17,27 +17,29 @@
 
 <header class="topbar">
   <div class="wrap topbar-in">
-    <a class="brand" href="#top" aria-label="microedu.com home">
+    <a class="brand" href="index.html" aria-label="microedu.com home">
       <img src="/logo.svg" alt="" class="brand-mark">
       <span class="brand-name">micro<span class="b-teal">edu</span><span class="b-orange">.com</span></span>
     </a>
     <nav class="nav">
-      <a href="#subscription" data-i18n="navSub">Subscription</a>
+      <a href="help.html" data-i18n="navHelp">I Need Help</a>
+      <a href="teachers.html" data-i18n="navFind">Our Teachers</a>
+      <a href="plans.html" data-i18n="navSub">Subscription</a>
     </nav>
     <div class="top-actions">
       <div class="lang-switch" role="group" aria-label="Language">
         <button type="button" id="langEn" class="sel">EN</button>
         <button type="button" id="langBn">বাংলা</button>
       </div>
-      <a class="btn btn-ghost" href="#signin" data-i18n="signInBtn">Sign In</a>
-      <a class="btn btn-primary" href="#register" data-i18n="joinFree">Join Free</a>
+      <a class="btn btn-ghost" href="dashboard.html" data-i18n="signInBtn">Sign In</a>
+      <a class="btn btn-primary" href="register.html" data-i18n="joinFree">Join Free</a>
     </div>
   </div>
 </header>
 
 <main id="top">
 
-  <!-- HERO -->
+<!-- HERO -->
   <section class="hero">
     <div class="wrap hero-in">
       <div class="hero-text">
@@ -45,8 +47,8 @@
         <h1 data-i18n-html="heroTitle">Stuck on one topic?<br>Learn it <span class="u-line">live</span>, from a<br>real teacher.</h1>
         <p class="lead" data-i18n="heroLead">Register once, pick a verified teacher, name the exact chapter or topic you are stuck on — and join a live class at your time. Any subject, any level, anywhere in Bangladesh.</p>
         <div class="hero-cta">
-          <a class="btn btn-primary btn-lg" href="#student" data-i18n="heroFind">Our Teachers →</a>
-          <a class="btn btn-white btn-lg" href="#register" data-i18n="heroJoinTeacher">Join as a Teacher</a>
+          <a class="btn btn-primary btn-lg" href="teachers.html" data-i18n="heroFind">Our Teachers →</a>
+          <a class="btn btn-white btn-lg" href="register.html" data-i18n="heroJoinTeacher">Join as a Teacher</a>
         </div>
         <div class="hero-points">
           <span data-i18n="heroP1">✔ Verified teacher CVs</span>
@@ -61,8 +63,7 @@
       </div>
     </div>
   </section>
-
-  <!-- FEATURES -->
+<!-- FEATURES -->
   <section class="features wrap">
     <div class="feature-card">
       <span class="f-ic teal">📚</span>
@@ -80,8 +81,7 @@
       <p data-i18n="feat3p">Tell the teacher when you are free. Morning, evening or late night — the class happens when it suits you.</p>
     </div>
   </section>
-
-  <!-- HOW IT WORKS -->
+<!-- HOW IT WORKS -->
   <section id="how" class="section">
     <div class="wrap split">
       <div class="split-art"><img src="/images/student.webp" alt="Student learning online at home"></div>
@@ -91,62 +91,11 @@
         <div class="step"><span class="step-n">1</span><div><h3 data-i18n="step1t">Register once — free</h3><p data-i18n="step1p">One simple form — name, email, phone. No student/teacher label: anyone can learn, and anyone can teach after completing a teacher profile.</p></div></div>
         <div class="step"><span class="step-n">2</span><div><h3 data-i18n="step2t">Choose a teacher &amp; topic</h3><p data-i18n="step2p">Pick a teacher, write your level, subject, chapter and the exact topic, and choose your hours and time.</p></div></div>
         <div class="step"><span class="step-n">3</span><div><h3 data-i18n="step3t">Pay &amp; join the class</h3><p data-i18n="step3p">Confirm payment, follow your class status — Pending → Confirm → Ongoing → Done — and join with the class link.</p></div></div>
-        <a class="btn btn-primary" href="#register" data-i18n="startNow">Start now →</a>
+        <a class="btn btn-primary" href="register.html" data-i18n="startNow">Start now →</a>
       </div>
     </div>
   </section>
-
-  <!-- I NEED HELP: describe the problem, get teacher suggestions -->
-  <section id="help" class="section grey">
-    <div class="wrap">
-      <p class="eyebrow center" data-i18n="helpEyebrow">— I need help</p>
-      <h2 class="center" data-i18n-html="helpTitle">Tell us where you are <span class="u-line">stuck</span>.</h2>
-      <p class="sub center" data-i18n-html="helpSub">Write your level, subject and the exact topic. microedu will suggest the teachers who match — then send your request to microedu, we finalize it from both sides and organize your meeting. There is no direct contact before that.</p>
-
-      <div class="card request-card">
-        <h3 data-i18n="reqCardTitle">What do you need help with?</h3>
-        <div class="row">
-          <div><label data-i18n="lblLevel">Level</label><input id="qLevel" value="Honors"></div>
-          <div><label data-i18n="lblSubject">Subject</label><input id="qSubject" value="Statistics+Excel"></div>
-        </div>
-        <div class="row">
-          <div><label data-i18n="lblChapter">Chapter</label><input id="qChapter" value="Graphs in Excel"></div>
-          <div><label data-i18n="lblTopic">Topic</label><input id="qTopic" value="Bar Chart, Pie Chart, Scatter Plot"></div>
-        </div>
-        <div class="row">
-          <div><label data-i18n="lblHours">Hours</label><input id="qHours" type="number" value="1" min="1"></div>
-          <div><label data-i18n="lblYourTime">Your available time</label><input id="qTime" data-i18n-ph="phTime" placeholder="Today 7pm"></div>
-        </div>
-        <div class="row">
-          <div><label data-i18n="lblClassTime">Class date &amp; time</label><input id="qStart" type="datetime-local"></div>
-          <div><label>&nbsp;</label><p class="muted" style="margin:0" data-i18n="joinNote">The class link stays hidden — you and your teacher enter with the Join Class button, only at this time.</p></div>
-        </div>
-        <p class="total-line"><span data-i18n="estTotal">Estimated total:</span> <b id="qTotal">BDT 500</b> <span class="muted" data-i18n="estNote">(final amount uses your teacher's own rate)</span></p>
-        <p><button class="btn btn-orange btn-lg" type="button" id="suggestBtn" data-i18n="suggestBtn">✨ Suggest teachers for me</button></p>
-        <div class="msg" id="reqMsg"></div>
-      </div>
-
-      <h3 class="list-title hidden" id="suggestTitle" data-i18n="suggestTitle">Suggested for you</h3>
-      <div class="grid" id="suggestList"></div>
-    </div>
-  </section>
-
-  <!-- ALL TEACHERS -->
-  <section id="student" class="section">
-    <div class="wrap">
-      <p class="eyebrow center" data-i18n="studentEyebrow">— For Students</p>
-      <h2 class="center" data-i18n-html="findTitle">Our <span class="u-line">teachers</span>.</h2>
-      <p class="sub center" data-i18n-html="findSub">Tell us your topic in <b>I Need Help</b> above — microedu suggests the right teacher for you and arranges the class. Or browse our teachers below and tap <b>Request</b>. Rates are shared once you send a request.</p>
-
-      <h3 class="list-title" data-i18n="teachersTitle">Our teachers</h3>
-      <div class="grid" id="teacherList"></div>
-
-      <h3 class="list-title" data-i18n="myReqTitle">My requests</h3>
-      <div id="myRequests"></div>
-    </div>
-  </section>
-
-  <!-- STATS -->
+<!-- STATS -->
   <section class="stats">
     <div class="wrap">
       <h2 data-i18n="statsTitle">A growing learning community in Bangladesh</h2>
@@ -158,8 +107,7 @@
       </div>
     </div>
   </section>
-
-  <!-- WHY / ABOUT -->
+<!-- WHY / ABOUT -->
   <section class="section">
     <div class="wrap split rev">
       <div class="split-text">
@@ -172,186 +120,19 @@
           <li data-i18n="tick3">Teachers earn in their wallet and withdraw anytime</li>
           <li data-i18n="tick4">Students rate, review and can complain after class</li>
         </ul>
-        <a class="btn btn-primary" href="#student" data-i18n="meetTeachers">Meet the teachers →</a>
+        <a class="btn btn-primary" href="teachers.html" data-i18n="meetTeachers">Meet the teachers →</a>
       </div>
       <div class="split-art"><img src="/images/teacher.webp" alt="Teacher giving an online class"></div>
     </div>
   </section>
-
-  <!-- SUBSCRIPTION -->
-  <section id="subscription" class="section grey">
-    <div class="wrap">
-      <p class="eyebrow center" data-i18n="subEyebrow">— Subscription</p>
-      <h2 class="center" data-i18n-html="subTitle">Simple plans for <span class="u-line">everyone</span>.</h2>
-      <p class="sub center" data-i18n="subSubText">One plan list for every member — learn and teach from the same account. Choose a duration of 1, 3, 6 or 12 months. Status starts Pending — confirm to activate.</p>
-      <div class="plans">
-        <div class="plan-card"><h3>Basic</h3><p class="price">Free</p><p data-i18n="basicPlanText">For learners getting started</p><ul class="plan-feats"><li data-i18n="bf1">Register &amp; create your profile</li><li data-i18n="bf2">Send help requests &amp; join live classes</li><li data-i18n="bf3">Teach free &amp; earn time credits</li><li data-i18n="bf4">Full refund protection on paid classes</li></ul></div>
-        <div class="plan-card hot"><span class="hot-tag" data-i18n="popular">Popular</span><h3>Plus</h3><p class="price">BDT 300<span data-i18n="perMonth">/month</span></p><p data-i18n="plusPlanText">For regular learners &amp; new teachers</p><ul class="plan-feats"><li data-i18n="pf1">Everything in Basic</li><li data-i18n="pf2">Priority teacher suggestions</li><li data-i18n="pf3">Priority class arrangement</li><li data-i18n="pf4">Featured profile in the teachers list</li></ul></div>
-        <div class="plan-card"><h3>Teacher Plus</h3><p class="price">BDT 500<span data-i18n="perMonth">/month</span></p><p data-i18n="teacherPlusText">For teachers who teach often</p><ul class="plan-feats"><li data-i18n="tf1">Everything in Plus</li><li data-i18n="tf2">Top placement in suggestions</li><li data-i18n="tf3">Teacher Plus badge on your profile</li><li data-i18n="tf4">Priority wallet withdrawals</li></ul></div>
-      </div>
-      <div class="card narrow">
-        <div class="row">
-          <div><label data-i18n="lblPlan">Plan</label><select id="subPlan"></select></div>
-          <div><label data-i18n="lblDuration">Duration (months)</label><select id="subMonths"><option>1</option><option>3</option><option>6</option><option>12</option></select></div>
-        </div>
-        <p><button class="btn btn-primary" id="subBtn" data-i18n="subscribeBtn">Subscribe</button></p>
-        <div id="subList"></div>
-        <div class="msg" id="subMsg"></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- JOIN AS TEACHER -->
-  <section class="section">
-    <div class="wrap split">
-      <div class="split-art"><img src="/images/group.webp" alt="Bangladeshi students learning together"></div>
-      <div class="split-text">
-        <p class="eyebrow" data-i18n="joinEyebrow">— Join us as a teacher</p>
-        <h2 data-i18n-html="joinTitle">Teach what you know.<br>Get <span class="u-line">paid</span> for it.</h2>
-        <p class="sub" data-i18n="joinSub">Register free in one minute, then complete your teacher profile from your dashboard. Set your own rate — hourly, bidding, or completely free. Teach free and the time goes to your time bank, to spend learning from other teachers.</p>
-        <div class="hero-cta">
-          <a class="btn btn-primary" href="#register" data-i18n="regTeacherBtn">Register as a Teacher →</a>
-          <a class="btn btn-white" href="#how" data-i18n="navHow">How it works</a>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- REGISTER -->
-  <section id="register" class="section grey">
-    <div class="wrap">
-      <p class="eyebrow center" data-i18n="regEyebrow">— Registration</p>
-      <h2 class="center" data-i18n-html="regTitle">Register <span class="u-line">now</span>.</h2>
-      <p class="sub center" data-i18n="regSub">Just your name, email and phone — register in one minute and start learning right away. No student/teacher label. Want to teach? Complete your teacher profile later, from your dashboard.</p>
-      <div class="card narrow">
-        <form id="regForm">
-          <div class="row"><div><label data-i18n="lblFullName">Full name *</label><input id="rName" required data-i18n-ph="phName" placeholder="Your full name"></div>
-          <div><label data-i18n="lblEmail">Email *</label><input id="rEmail" type="email" required data-i18n-ph="phEmail" placeholder="you@example.com"></div></div>
-          <div class="row"><div><label data-i18n="lblPassword">Password *</label><input id="rPass" type="password" required data-i18n-ph="phPass" placeholder="Choose a password"></div>
-          <div><label data-i18n="lblPassword2">Retype password *</label><input id="rPass2" type="password" required data-i18n-ph="phPass2" placeholder="Same password again"></div></div>
-          <div class="row"><div><label data-i18n="lblPhone">Phone</label><input id="rPhone" data-i18n-ph="phPhone" placeholder="01XXXXXXXXX"></div>
-          <div><label data-i18n="lblMobile">Mobile</label><input id="rMobile" data-i18n-ph="phPhone" placeholder="01XXXXXXXXX"></div></div>
-
-          <label data-i18n="photoQ">How do you want to appear?</label>
-          <div class="optgroup" id="photoModeGroup">
-            <label><input type="radio" name="photoMode" value="personal" checked><span class="opt"><span data-i18n="photoPersonal">My photo</span><small data-i18n="photoPersonalSub">Your own profile photo</small></span></label>
-            <label><input type="radio" name="photoMode" value="group"><span class="opt"><span data-i18n="photoGroup">Group photo</span><small data-i18n="photoGroupSub">For a group / team</small></span></label>
-            <label><input type="radio" name="photoMode" value="anonymous"><span class="opt"><span data-i18n="photoAnon">Anonymous</span><small data-i18n="photoAnonSub">Name &amp; photo stay hidden</small></span></label>
-          </div>
-          <div class="row">
-            <div><label data-i18n="lblPhoto">Photo</label><input id="rPhotoFile" type="file" accept="image/*"><img id="photoPreview" class="photo-preview" alt=""></div>
-            <div><label data-i18n="lblGroupName">Group name (if group photo)</label><input id="rGroupName" data-i18n-ph="phGroupName" placeholder="e.g. Dhaka Study Circle"></div>
-          </div>
-
-          <p class="muted" data-i18n="regNote">That's all for now — you can learn from any teacher with this account. To teach, complete your teacher profile from your dashboard after signing in.</p>
-          <p><button class="btn btn-primary btn-lg" type="submit" data-i18n="regSubmit">Register — it's free</button></p>
-          <div class="msg" id="regMsg"></div>
-        </form>
-      </div>
-    </div>
-  </section>
-
-  <!-- DASHBOARD -->
-  <section id="signin" class="section">
-    <div class="wrap">
-      <div class="card narrow">
-        <form id="signForm">
-          <div class="row"><div><label data-i18n="lblEmail">Email</label><input id="sEmail" type="email" required data-i18n-ph="phEmail" placeholder="you@example.com"></div>
-          <div><label data-i18n="lblPassword">Password</label><input id="sPass" type="password" required data-i18n-ph="phYourPass" placeholder="Your password"></div></div>
-          <p><button class="btn btn-primary" type="submit" data-i18n="signInBtn">Sign In</button>
-          <button class="btn btn-ghost" type="button" id="signOut" data-i18n="signOutBtn">Sign Out</button></p>
-          <div class="msg" id="signMsg"></div>
-        </form>
-        <div id="profileBox" class="hidden">
-          <h3 data-i18n="myProfile">My profile</h3>
-          <div id="profileContent"></div>
-        </div>
-      </div>
-
-      <div class="card narrow hidden" id="teacherCard">
-        <h3 data-i18n="teacherCardTitle">👩‍🏫 Become a teacher — complete your profile</h3>
-        <p class="muted" data-i18n="teacherCardNote">Every field is required — teachers carry responsibility for their students. Once saved, you appear in the teacher list with your own rate. There is no price ceiling: charge hourly, by bidding, or teach completely free.</p>
-        <form id="teacherForm">
-          <div class="row"><div><label data-i18n="lblEducation">Education *</label><input id="tEducation" required data-i18n-ph="phEducation" placeholder="Masters Completed / Honors Completed"></div>
-          <div><label data-i18n="lblUniversity">University / Institution *</label><input id="tUniversity" required data-i18n-ph="phUniversity" placeholder="University of Dhaka"></div></div>
-          <div class="row"><div><label data-i18n="lblProfession">Profession *</label><input id="tProfession" required data-i18n-ph="phProfession" placeholder="Teacher / Student / Engineer"></div>
-          <div><label data-i18n="lblPosition">Position</label><input id="tPosition" data-i18n-ph="phPosition" placeholder="Lecturer, SSC candidate…"></div></div>
-          <div class="row"><div><label data-i18n="lblExperience">Experience *</label><input id="tExperience" required data-i18n-ph="phExperience" placeholder="5 years teaching"></div>
-          <div><label data-i18n="lblSpeciality">Speciality / Skills *</label><input id="tSpeciality" required data-i18n-ph="phSpeciality" placeholder="Statistics, Excel, English"></div></div>
-          <div class="row"><div><label data-i18n="lblSubjects">Subjects *</label><input id="tSubjects" required data-i18n-ph="phSubjects" placeholder="Statistics, Excel"></div>
-          <div><label data-i18n="lblLevelCv">Level *</label><input id="tLevel" required data-i18n-ph="phLevelCv" placeholder="Honors / HSC / SSC"></div></div>
-          <div class="row"><div><label data-i18n="lblAddress">Address *</label><input id="tAddress" required data-i18n-ph="phAddress" placeholder="District, Division"></div>
-          <div><label data-i18n="lblAvail">Daily available time</label><input id="tAvail" data-i18n-ph="phAvail" placeholder="6pm – 10pm"></div></div>
-          <div class="row"><div><label data-i18n="lblPricing">How will you charge?</label><select id="tPricing"><option value="hourly" data-i18n="priceHourly">Hourly rate</option><option value="bidding" data-i18n="priceBidding">Bidding (students offer a price)</option><option value="free" data-i18n="priceFree">Free service</option></select></div>
-          <div><label id="tRateLabel" data-i18n="lblRate">Rate (BDT / hour)</label><input id="tRate" type="number" value="500" min="0"></div></div>
-          <label data-i18n="lblExpTime">Expertise-wise time</label><textarea id="tExpTime" rows="2" data-i18n-ph="phExpTime" placeholder="Statistics: Sat–Thu 6–8pm · Excel: Friday 10am–12pm"></textarea>
-          <label class="checkline"><input type="checkbox" id="tTimeEx"> <span data-i18n="timeExLabel">I accept time exchange — students can pay me with their time-bank credit, and my free teaching earns me time credit</span></label>
-          <div><label data-i18n="lblCvFile">CV file (file name is stored)</label><input id="tFile" type="file"></div>
-          <p><button class="btn btn-primary" type="submit" data-i18n="saveTeacherBtn">Save my teacher profile</button></p>
-          <div class="msg" id="teacherMsg"></div>
-        </form>
-      </div>
-
-      <div class="card narrow hidden" id="adminCard">
-        <h3 data-i18n="adminTitle">🛡️ microedu admin — extension requests</h3>
-        <div id="extList"></div>
-      </div>
-
-      <div class="grid two">
-        <div class="card">
-          <h3>⏳ <span data-i18n="timeBankTitle">My time bank</span></h3>
-          <p class="wallet-bal"><span data-i18n="lblTimeBalance">Time credit:</span> <b id="tbBalance">0 min</b></p>
-          <p class="muted" data-i18n="timeBankNote">Teach a free class and the time lands here. Spend it learning from teachers who accept time exchange.</p>
-          <div id="tbEntries"></div>
-        </div>
-        <div class="card">
-          <h3>💼 <span data-i18n="walletTitle">My wallet</span> <span class="muted" data-i18n="forTeachers">(teachers)</span></h3>
-          <p class="wallet-bal"><span data-i18n="lblBalance">Balance:</span> <b id="wBalance">BDT 0</b></p>
-          <div id="wEntries"></div>
-          <div class="row"><div><label data-i18n="lblWithdrawAmt">Withdraw amount (BDT)</label><input id="wAmt" type="number" min="1" placeholder="500"></div></div>
-          <p><button class="btn btn-primary" id="wBtn" data-i18n="withdrawBtn">Withdraw</button></p>
-          <div class="msg" id="wMsg"></div>
-        </div>
-        <div class="card">
-          <h3>📩 <span data-i18n="reqToMeTitle">Requests to me</span> <span class="muted" data-i18n="forTeachers">(teachers)</span></h3>
-          <div id="teacherReqs"></div>
-          <h3 class="cv-title" data-i18n="feedbackTitle">⭐ Evaluation / Feedback</h3>
-          <label data-i18n="lblGid">Class GID</label><input id="fGid" placeholder="XXXX-XXX-XXX">
-          <label data-i18n="lblComment">Comment</label><textarea id="fComment" rows="2" data-i18n-ph="phComment" placeholder="How was the class?"></textarea>
-          <label data-i18n="lblRanking">Ranking</label>
-          <div class="stars" id="fStars"><span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span></div>
-          <label data-i18n="lblComplain">Complain</label><textarea id="fComplain" rows="2" data-i18n-ph="phComplain" placeholder="Any problem? Tell us — full refund if there is a problem"></textarea>
-          <p><button class="btn btn-orange" id="fBtn" data-i18n="feedbackBtn">Submit Feedback</button></p>
-          <div class="msg" id="fMsg"></div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- PEOPLE -->
-  <section id="people" class="section grey">
-    <div class="wrap">
-      <p class="eyebrow center" data-i18n="peopleEyebrow">— Community</p>
-      <h2 class="center" data-i18n-html="peopleTitle">Registered <span class="u-line">people</span>.</h2>
-      <div class="card">
-        <p id="peopleCounts" class="counts"></p>
-        <div class="table-scroll"><table>
-          <thead><tr><th data-i18n="thId">ID</th><th data-i18n="thRole">Type</th><th data-i18n="thName">Name</th><th data-i18n="thEmail">Email</th><th data-i18n="thEducation">Education</th><th data-i18n="thUniversity">University</th><th data-i18n="thProfession">Profession</th><th data-i18n="thExperience">Experience</th><th data-i18n="thSubscription">Subscription</th></tr></thead>
-          <tbody id="peopleBody"></tbody>
-        </table></div>
-        <p><button class="btn btn-ghost btn-sm" id="refreshPeople" data-i18n="refreshBtn">Refresh</button></p>
-      </div>
-    </div>
-  </section>
-
-  <!-- CTA -->
+<!-- CTA -->
   <section class="cta">
     <div class="wrap cta-in">
       <div>
         <h2 data-i18n="ctaTitle">Your next class is one topic away.</h2>
         <p data-i18n="ctaSub">Tell us the exact part you are stuck on — a teacher will take it from there.</p>
       </div>
-      <a class="btn btn-white btn-lg" href="#register" data-i18n="ctaBtn">Join microedu.com — Free</a>
+      <a class="btn btn-white btn-lg" href="register.html" data-i18n="ctaBtn">Join microedu.com — Free</a>
     </div>
   </section>
 
@@ -360,16 +141,16 @@
 <footer>
   <div class="wrap foot">
     <div class="foot-col">
-      <a class="brand light" href="#top"><img src="/logo.svg" alt="" class="brand-mark"><span class="brand-name">micro<span class="b-teal">edu</span><span class="b-orange">.com</span></span></a>
+      <a class="brand light" href="index.html"><img src="/logo.svg" alt="" class="brand-mark"><span class="brand-name">micro<span class="b-teal">edu</span><span class="b-orange">.com</span></span></a>
       <p data-i18n="footAbout">Micro Edu. Support — direct online tuition support on any part of any subject, at any time, from verified teachers across Bangladesh.</p>
     </div>
     <div class="foot-col">
       <h4 data-i18n="footExplore">Explore</h4>
       <a href="#how" data-i18n="navHow">How it works</a>
-      <a href="#student" data-i18n="navFind">Our Teachers</a>
-      <a href="#subscription" data-i18n="navSub">Subscription</a>
-      <a href="#register" data-i18n="regLink">Registration</a>
-      <a href="#people" data-i18n="navPeople">Registered People</a>
+      <a href="teachers.html" data-i18n="navFind">Our Teachers</a>
+      <a href="plans.html" data-i18n="navSub">Subscription</a>
+      <a href="register.html" data-i18n="regLink">Registration</a>
+      <a href="teachers.html#people" data-i18n="navPeople">Registered People</a>
     </div>
     <div class="foot-col">
       <h4 data-i18n="footKnow">Good to know</h4>

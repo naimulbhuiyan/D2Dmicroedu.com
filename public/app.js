@@ -2,6 +2,12 @@
 /* microedu.com — frontend logic. Same API contract as before; new design,
    photo / group / anonymous registration, hourly / bidding / free pricing. */
 const $ = id => document.getElementById(id);
+/* Multi-page guards: each page carries only its own sections, so every
+   binding/write goes through these helpers and quietly skips missing elements. */
+const on = (id, ev, fn) => { const el = $(id); if (el) el[ev] = fn; };
+const setText = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+const setHtml = (id, v) => { const el = $(id); if (el) el.innerHTML = v; };
+const hideEl = (id, hide = true) => { const el = $(id); if (el) el.classList.toggle('hidden', hide); };
 let token = localStorage.getItem('microedu_token') || localStorage.getItem('d2d_token') || '';
 let me = null, myRanking = 0, photoDataUrl = '';
 const teacherPricing = {};
@@ -18,7 +24,7 @@ async function api(path, opts = {}) {
 }
 function msg(el, text, ok = true) { el.textContent = text; el.className = 'msg ' + (ok ? 'ok' : 'err'); }
 function saveToken(t) { token = t; localStorage.setItem('microedu_token', t); localStorage.removeItem('d2d_token'); }
-function fillPlans() { $('subPlan').innerHTML = PLANS.map(p => `<option>${p}</option>`).join(''); }
+function fillPlans() { const s = $('subPlan'); if (s) s.innerHTML = PLANS.map(p => `<option>${p}</option>`).join(''); }
 fillPlans();
 const fmtMins = m => { m = Math.round(Number(m) || 0); const h = Math.floor(m / 60), r = m % 60; return h ? `${h}h ${r}m` : `${r}m`; };
 
@@ -30,7 +36,7 @@ document.querySelectorAll('input[name="photoMode"]').forEach(r => r.onchange = (
   $('rPhotoFile').disabled = mode === 'anonymous';
   if (mode === 'anonymous') { photoDataUrl = ''; $('photoPreview').classList.remove('show'); }
 });
-$('rPhotoFile').onchange = () => {
+on('rPhotoFile', 'onchange', () => {
   const f = $('rPhotoFile').files[0];
   if (!f) return;
   const img = new Image();
@@ -45,15 +51,15 @@ $('rPhotoFile').onchange = () => {
     URL.revokeObjectURL(img.src);
   };
   img.src = URL.createObjectURL(f);
-};
+});
 
 /* ---------- pricing choice (teacher profile form) ---------- */
-$('tPricing').onchange = () => {
+on('tPricing', 'onchange', () => {
   const v = $('tPricing').value;
   $('tRateLabel').textContent = v === 'bidding' ? 'Starting bid (BDT)' : 'Rate (BDT / hour)';
   $('tRate').disabled = v === 'free';
   if (v === 'free') $('tRate').value = 0; else if (!$('tRate').value || Number($('tRate').value) === 0) $('tRate').value = 500;
-};
+});
 function priceText(cv) {
   if (!cv) return 'BDT 500/hr';
   const t = cv.pricing_type || 'hourly';
@@ -79,7 +85,7 @@ function avatarHtml(p, big = false) {
 }
 
 /* ---------- registration (step 1: basic — learn right away) ---------- */
-$('regForm').onsubmit = async e => {
+on('regForm', 'onsubmit', async e => {
   e.preventDefault();
   if ($('rPass').value !== $('rPass2').value) return msg($('regMsg'), 'Passwords do not match', false);
   const mode = photoMode();
@@ -92,13 +98,32 @@ $('regForm').onsubmit = async e => {
       photo_data: mode === 'anonymous' ? '' : photoDataUrl,
     }) });
     saveToken(d.token); me = d.person; showProfile(d.person, d.cv);
-    msg($('regMsg'), 'Registered and signed in: ' + d.person.name + ' — you can learn now. To teach, complete your teacher profile in the dashboard.');
+    showRegSuccess(d.person);
     loadAll();
   } catch (err) { msg($('regMsg'), err.message, false); }
+});
+/* Smart welcome after registration: clear next steps, one tap each way. */
+function showRegSuccess(p) {
+  const el = $('regMsg');
+  el.className = 'msg ok success-box';
+  el.innerHTML = `🎉 <b>Welcome to microedu, ${esc(p.name)}!</b> Your account is ready and you are signed in.<br>` +
+    `You can learn from any teacher right now — or teach and earn. What would you like to do?<br>` +
+    `<span class="success-btns"><button type="button" class="btn btn-orange" onclick="goHelp()">🔍 I need help — find me a teacher</button>` +
+    `<button type="button" class="btn btn-primary" onclick="goTeach()">👩‍🏫 Become a teacher — complete my profile</button></span>`;
+  setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60);
+}
+window.goHelp = () => { location.href = 'help.html'; };
+window.goTeach = () => {
+  const c = $('teacherCard');
+  if (!c) { location.href = 'dashboard.html#teacher'; return; }
+  c.classList.remove('hidden');
+  c.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  c.classList.add('flash');
+  setTimeout(() => c.classList.remove('flash'), 2600);
 };
 
 /* ---------- teacher profile (step 2: complete profile to teach) ---------- */
-$('teacherForm').onsubmit = async e => {
+on('teacherForm', 'onsubmit', async e => {
   e.preventDefault();
   const cv = {
     education: $('tEducation').value, university: $('tUniversity').value, profession: $('tProfession').value,
@@ -115,21 +140,21 @@ $('teacherForm').onsubmit = async e => {
     msg($('teacherMsg'), 'Teacher profile saved — you are now in the teacher list.');
     loadAll();
   } catch (err) { msg($('teacherMsg'), err.message, false); }
-};
+});
 function prefillTeacherForm(cv) {
   if (!cv) return;
-  const set = (id, v) => { if (v) $(id).value = v; };
+  const set = (id, v) => { const el = $(id); if (el && v) el.value = v; };
   set('tEducation', cv.education); set('tUniversity', cv.university); set('tProfession', cv.profession);
   set('tPosition', cv.position); set('tExperience', cv.experience); set('tSpeciality', cv.speciality);
   set('tSubjects', cv.subjects); set('tLevel', cv.level); set('tAddress', cv.address);
   set('tAvail', cv.available_time); set('tExpTime', cv.expertise_time);
-  if (cv.pricing_type) $('tPricing').value = cv.pricing_type;
-  if (cv.rate_bdt_per_hour) $('tRate').value = cv.rate_bdt_per_hour;
-  $('tTimeEx').checked = !!Number(cv.accepts_time_exchange || 0);
+  if (cv.pricing_type && $('tPricing')) $('tPricing').value = cv.pricing_type;
+  if (cv.rate_bdt_per_hour && $('tRate')) $('tRate').value = cv.rate_bdt_per_hour;
+  if ($('tTimeEx')) $('tTimeEx').checked = !!Number(cv.accepts_time_exchange || 0);
 }
 
 /* ---------- sign in / profile ---------- */
-$('signForm').onsubmit = async e => {
+on('signForm', 'onsubmit', async e => {
   e.preventDefault();
   try {
     const d = await api('/api/signin', { method: 'POST', body: JSON.stringify({ email: $('sEmail').value, password: $('sPass').value }) });
@@ -137,15 +162,13 @@ $('signForm').onsubmit = async e => {
     msg($('signMsg'), 'Welcome, ' + d.person.name);
     loadAll();
   } catch (err) { msg($('signMsg'), err.message, false); }
-};
-$('signOut').onclick = () => {
+});
+on('signOut', 'onclick', () => {
   token = ''; me = null; myTimeBalance = 0;
   localStorage.removeItem('microedu_token'); localStorage.removeItem('d2d_token');
-  $('profileBox').classList.add('hidden');
-  $('teacherCard').classList.add('hidden');
-  $('adminCard').classList.add('hidden');
+  hideEl('profileBox'); hideEl('teacherCard'); hideEl('adminCard');
   msg($('signMsg'), 'Signed out');
-};
+});
 
 /* ---------- microedu admin: extension approvals (site owner, member #1) ---------- */
 async function loadExtensions() {
@@ -156,11 +179,11 @@ async function loadExtensions() {
 }
 window.approveExt = async gid => { try { await api('/api/requests/extend/approve', { method: 'POST', body: JSON.stringify({ gid }) }); loadExtensions(); loadMine(); } catch (e) { alert(e.message); } };
 function showProfile(p, cv) {
-  if (!p) return;
+  if (!p || !$('profileBox')) return;
   $('profileBox').classList.remove('hidden');
-  $('teacherCard').classList.remove('hidden');
+  hideEl('teacherCard', false);
   fillPlans();
-  if (p.id === 1) { $('adminCard').classList.remove('hidden'); loadExtensions(); }
+  if (p.id === 1) { hideEl('adminCard', false); loadExtensions(); }
   const isTeacher = !!(cv && Number(cv.teacher_ready || 0));
   const appear = p.photo_mode === 'anonymous' ? '🕶️ Anonymous (public lists hide your name & photo)'
     : p.photo_mode === 'group' ? '👥 Group' + (p.group_name ? ': ' + esc(p.group_name) : '')
@@ -171,13 +194,13 @@ function showProfile(p, cv) {
     Subjects: ${esc(cv.subjects)} · Level: ${esc(cv.level)}<br>
     Price: <b>${esc(priceText(cv))}</b>${Number(cv.accepts_time_exchange || 0) ? ' · ⏳ Accepts time exchange' : ''}<br>
     Address: ${esc(cv.address)} · Available: ${esc(cv.available_time || '-')}${cv.expertise_time ? '<br>Expertise-wise time: ' + esc(cv.expertise_time) : ''} · CV file: ${esc(cv.cv_file_name || '-')}</p>`
-    : '<p class="muted" style="margin-top:12px">You can learn from any teacher with this account. To teach, complete your teacher profile below.</p>');
+    : '<p class="muted" style="margin-top:12px">You can learn from any teacher with this account.</p><p><button class="btn btn-primary btn-sm" type="button" onclick="goTeach()">👩‍🏫 Become a teacher — complete my profile</button></p>');
   prefillTeacherForm(cv);
   loadTimebank();
 }
 
 /* ---------- subscription ---------- */
-$('subBtn').onclick = async () => {
+on('subBtn', 'onclick', async () => {
   try {
     const d = await api('/api/subscriptions', { method: 'POST', body: JSON.stringify({ plan: $('subPlan').value, months: $('subMonths').value }) });
     const s = d.subscription;
@@ -189,13 +212,13 @@ $('subBtn').onclick = async () => {
     };
     msg($('subMsg'), 'Subscription created — Pending');
   } catch (e) { msg($('subMsg'), e.message, false); }
-};
+});
 
 /* ---------- teachers & requests ---------- */
 function calcTotal() { const h = Number($('qHours').value) || 1; $('qTotal').textContent = 'BDT ' + (h * 500); }
-$('qHours').oninput = calcTotal;
+on('qHours', 'oninput', calcTotal);
 
-function renderTeacherCard(t, suggested = false) {
+function renderTeacherCard(t, suggested = false, requestable = true) {
   teacherPricing[t.id] = { pricing: (t.cv && t.cv.pricing_type) || 'hourly', rate: (t.cv && t.cv.rate_bdt_per_hour) || 500, acceptsTime: !!(t.cv && Number(t.cv.accepts_time_exchange || 0)) };
   const subjects = (t.cv && t.cv.subjects ? t.cv.subjects : '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 4);
   const matchNote = suggested && t.matched && t.matched.length ? `<p class="match-note">✨ Matches: ${esc(t.matched.join(', '))}</p>` : '';
@@ -205,24 +228,53 @@ function renderTeacherCard(t, suggested = false) {
     ${matchNote}
     <div class="chips">${subjects.map(s => `<span class="chip">${esc(s)}</span>`).join('')}${teacherPricing[t.id].acceptsTime ? '<span class="chip time-ex">⏳ Accepts time exchange</span>' : ''}</div>
     ${t.cv?.available_time || t.cv?.expertise_time ? `<p class="t-meta">🕒 ${esc(t.cv.expertise_time || t.cv.available_time)}</p>` : ''}
-    <div class="t-foot"><span class="muted">Rate shared after you request</span><button class="btn btn-primary btn-sm" onclick="requestTeacher(${t.id})">Request</button></div>
+    <div class="t-foot"><span class="muted">Rate shared after you request</span>${requestable ? `<button class="btn btn-primary btn-sm" onclick="requestTeacher(${t.id})">Request</button>` : '<span class="muted">Request via I Need Help above</span>'}</div>
   </div>`;
 }
+let suggestedIds = [];
 async function loadTeachers() {
   try {
     const d = await api('/api/teachers');
-    $('teacherList').innerHTML = d.teachers.length ? d.teachers.map(t => renderTeacherCard(t)).join('') : '<p class="muted">No teachers yet — register free and complete your teacher profile to be the first.</p>';
+    window.allTeachers = d.teachers;
+    setHtml('teacherList', d.teachers.length ? d.teachers.map(t => renderTeacherCard(t, false, false)).join('') : '<p class="muted">No teachers yet — register free and complete your teacher profile to be the first.</p>');
   } catch (e) { /* list stays as-is */ }
 }
-$('suggestBtn').onclick = async () => {
+on('suggestBtn', 'onclick', async () => {
+  const btn = $('suggestBtn'); const old = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ Finding your teachers…';
   try {
     const qs = new URLSearchParams({ level: $('qLevel').value, subject: $('qSubject').value, chapter: $('qChapter').value, topic: $('qTopic').value });
     const d = await api('/api/suggest?' + qs.toString());
+    suggestedIds = d.teachers.map(t => t.id);
     $('suggestTitle').classList.remove('hidden');
     $('suggestList').innerHTML = d.teachers.length ? d.teachers.map(t => renderTeacherCard(t, true)).join('') : '<p class="muted">No teachers yet.</p>';
+    $('suggestActions').classList.toggle('hidden', !d.teachers.length);
     $('suggestList').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (e) { msg($('reqMsg'), e.message, false); }
-};
+  finally { btn.disabled = false; btn.textContent = old; }
+});
+/* ---------- the three ways to send a request (no open direct requests) ---------- */
+function helpPayload(teacher_id) {
+  return { teacher_id, level: $('qLevel').value, subject: $('qSubject').value, chapter: $('qChapter').value, topic: $('qTopic').value, hours: $('qHours').value, available_time: $('qTime').value, class_start: $('qStart').value ? new Date($('qStart').value).toISOString() : null };
+}
+async function sendRequests(ids) {
+  if (!ids.length) return msg($('bulkMsg'), 'Tap "Suggest teachers for me" first.', false);
+  if (!token) { msg($('bulkMsg'), 'Please register or sign in first — it takes one minute.', false); setTimeout(() => { location.href = 'register.html'; }, 900); return; }
+  let sent = 0;
+  for (const id of ids) { try { await api('/api/requests', { method: 'POST', body: JSON.stringify(helpPayload(id)) }); sent++; } catch (e) { /* skip a failed one */ } }
+  msg($('bulkMsg'), sent ? `✅ Request sent to ${sent} teacher(s). microedu will finalize it from both sides and organize your meeting.` : 'Could not send — please sign in and try again.', !!sent);
+  if (sent) loadMine();
+}
+window.sendToAll = () => sendRequests(suggestedIds);
+window.sendToTop = n => sendRequests(suggestedIds.slice(0, n));
+window.microeduChoose = () => { if (suggestedIds.length) { sendRequests([suggestedIds[0]]); msg($('bulkMsg'), 'microedu picked the best-matching teacher for you — we will finalize and arrange your class.'); } else msg($('bulkMsg'), 'Tap "Suggest teachers for me" first — microedu will pick the best match.', false); };
+/* Search a teacher you already know, by part of their name. */
+on('tSearch', 'oninput', () => {
+  const q = $('tSearch').value.trim().toLowerCase();
+  if (q.length < 2) { $('searchList').innerHTML = ''; return; }
+  const hits = (window.allTeachers || []).filter(t => (displayName(t) || '').toLowerCase().includes(q)).slice(0, 6);
+  $('searchList').innerHTML = hits.length ? hits.map(t => renderTeacherCard(t)).join('') : '<p class="muted">No teacher found with that name.</p>';
+});
 window.requestTeacher = async id => {
   const info = teacherPricing[id] || { pricing: 'hourly', rate: 500, acceptsTime: false };
   const payload = { teacher_id: id, level: $('qLevel').value, subject: $('qSubject').value, chapter: $('qChapter').value, topic: $('qTopic').value, hours: $('qHours').value, available_time: $('qTime').value, class_start: $('qStart').value ? new Date($('qStart').value).toISOString() : null };
@@ -275,8 +327,8 @@ async function loadMine() {
       const ext = r.extension_status === 'Requested' ? '<p class="muted">⏳ Extension requested — waiting for microedu</p>' : r.extension_status === 'Approved' ? `<p class="muted">✅ Extra ${r.extension_minutes} min approved by microedu</p>` : '';
       return `<div class="req-card"><p><b>GID: ${esc(r.gid)}</b> · ${esc(r.subject)} — ${esc(r.topic)}<br>${r.hours} hr × BDT ${r.rate_bdt_per_hour} = <b>BDT ${r.amount_bdt}</b>${when}</p>${tracker(r)}<p>${escrowLine(r)}</p>${ext}${btns.length ? `<p style="display:flex;gap:8px;flex-wrap:wrap">${btns.join('')}</p>` : ''}</div>`;
     };
-    $('myRequests').innerHTML = d.asStudent.map(r => render(r, 'student')).join('') || '<p class="muted">None yet</p>';
-    $('teacherReqs').innerHTML = d.asTeacher.map(r => render(r, 'teacher')).join('') || '<p class="muted">None yet</p>';
+    setHtml('myRequests', d.asStudent.map(r => render(r, 'student')).join('') || '<p class="muted">None yet</p>');
+    setHtml('teacherReqs', d.asTeacher.map(r => render(r, 'teacher')).join('') || '<p class="muted">None yet</p>');
     loadWallet();
   } catch (e) { /* not signed in */ }
 }
@@ -291,8 +343,8 @@ async function loadTimebank() {
   try {
     const d = await api('/api/timebank');
     myTimeBalance = Number(d.balance_minutes) || 0;
-    $('tbBalance').textContent = fmtMins(myTimeBalance);
-    $('tbEntries').innerHTML = d.entries.map(en => `<p>${en.kind === 'earn' ? '➕ Earned' : '➖ Spent'} ${fmtMins(Math.abs(en.minutes))} — ${esc(en.topic || 'Class')} ${en.gid ? '(' + esc(en.gid) + ')' : ''}</p>`).join('') || '<p class="muted">No entries yet — teach a free class to earn time credit.</p>';
+    setText('tbBalance', fmtMins(myTimeBalance));
+    setHtml('tbEntries', d.entries.map(en => `<p>${en.kind === 'earn' ? '➕ Earned' : '➖ Spent'} ${fmtMins(Math.abs(en.minutes))} — ${esc(en.topic || 'Class')} ${en.gid ? '(' + esc(en.gid) + ')' : ''}</p>`).join('') || '<p class="muted">No entries yet — teach a free class to earn time credit.</p>');
   } catch (e) { /* not signed in */ }
 }
 
@@ -301,29 +353,35 @@ async function loadWallet() {
   if (!token) return;
   try {
     const d = await api('/api/wallet');
-    $('wBalance').textContent = 'BDT ' + d.balance;
-    $('wEntries').innerHTML = d.entries.map(en => `<p>${esc(en.topic || '')} ${en.gid ? '(' + esc(en.gid) + ')' : ''} — BDT ${en.amount_bdt} (${esc(en.kind)})</p>`).join('') || '<p class="muted">No entries</p>';
+    setText('wBalance', 'BDT ' + d.balance);
+    setHtml('wEntries', d.entries.map(en => `<p>${esc(en.topic || '')} ${en.gid ? '(' + esc(en.gid) + ')' : ''} — BDT ${en.amount_bdt} (${esc(en.kind)})</p>`).join('') || '<p class="muted">No entries</p>');
   } catch (e) { /* not signed in */ }
 }
-$('wBtn').onclick = async () => { try { const d = await api('/api/wallet/withdraw', { method: 'POST', body: JSON.stringify({ amount: $('wAmt').value }) }); msg($('wMsg'), 'Withdrawn. New balance: BDT ' + d.balance); loadWallet(); } catch (e) { msg($('wMsg'), e.message, false); } };
+on('wBtn', 'onclick', async () => { try { const d = await api('/api/wallet/withdraw', { method: 'POST', body: JSON.stringify({ amount: $('wAmt').value }) }); msg($('wMsg'), 'Withdrawn. New balance: BDT ' + d.balance); loadWallet(); } catch (e) { msg($('wMsg'), e.message, false); } });
 document.querySelectorAll('#fStars span').forEach(s => s.onclick = () => { myRanking = Number(s.dataset.v); document.querySelectorAll('#fStars span').forEach(x => x.classList.toggle('on', Number(x.dataset.v) <= myRanking)); });
-$('fBtn').onclick = async () => { try { await api('/api/feedback', { method: 'POST', body: JSON.stringify({ gid: $('fGid').value, comment: $('fComment').value, ranking: myRanking, complain: $('fComplain').value }) }); msg($('fMsg'), 'Feedback saved'); } catch (e) { msg($('fMsg'), e.message, false); } };
+on('fBtn', 'onclick', async () => { try { await api('/api/feedback', { method: 'POST', body: JSON.stringify({ gid: $('fGid').value, comment: $('fComment').value, ranking: myRanking, complain: $('fComplain').value }) }); msg($('fMsg'), 'Feedback saved'); } catch (e) { msg($('fMsg'), e.message, false); } });
 
 /* ---------- people & stats ---------- */
 async function loadPeople() {
   try {
     const d = await api('/api/people');
-    $('peopleCounts').textContent = `Total members: ${d.total} · Teachers: ${d.counts.teachers} · Teach for time exchange: ${d.counts.time_teachers}`;
-    $('statTeachers').textContent = d.counts.teachers;
-    $('statStudents').textContent = d.total;
-    $('statTotal').textContent = d.counts.time_teachers;
-    $('peopleBody').innerHTML = d.people.map(p => `<tr><td>${p.id}</td><td>${p.cv && Number(p.cv.teacher_ready || 0) ? '👩‍🏫 Teacher' : 'Member'}</td><td>${!p.anonymous && p.photo_data ? `<img class="thumb" src="${p.photo_data}" alt=""> ` : ''}${esc(displayName(p))}</td><td>${esc(p.email || '—')}</td><td>${esc(p.cv?.education || '')}</td><td>${esc(p.cv?.university || '')}</td><td>${esc(p.cv?.profession || '')}</td><td>${esc(p.cv?.experience || '')}</td><td>${p.subscription ? esc(p.subscription.plan) + ' (' + esc(p.subscription.status) + ')' : ''}</td></tr>`).join('');
+    setText('peopleCounts', `Total members: ${d.total} · Teachers: ${d.counts.teachers} · Teach for time exchange: ${d.counts.time_teachers}`);
+    setText('statTeachers', d.counts.teachers);
+    setText('statStudents', d.total);
+    setText('statTotal', d.counts.time_teachers);
+    setHtml('peopleBody', d.people.map(p => `<tr><td>${p.id}</td><td>${p.cv && Number(p.cv.teacher_ready || 0) ? '👩‍🏫 Teacher' : 'Member'}</td><td>${!p.anonymous && p.photo_data ? `<img class="thumb" src="${p.photo_data}" alt=""> ` : ''}${esc(displayName(p))}</td><td>${esc(p.email || '—')}</td><td>${esc(p.cv?.education || '')}</td><td>${esc(p.cv?.university || '')}</td><td>${esc(p.cv?.profession || '')}</td><td>${esc(p.cv?.experience || '')}</td><td>${p.subscription ? esc(p.subscription.plan) + ' (' + esc(p.subscription.status) + ')' : ''}</td></tr>`).join(''));
   } catch (e) { /* table stays as-is */ }
 }
-$('refreshPeople').onclick = loadPeople;
+on('refreshPeople', 'onclick', loadPeople);
 
-function loadAll() { loadTeachers(); loadPeople(); loadMine(); }
+/* On the dashboard, restore the signed-in profile from the saved token. */
+async function restoreSession() {
+  if (!token || !$('profileBox')) return;
+  try { const d = await api('/api/me'); me = d.person; showProfile(d.person, d.cv); } catch (e) { /* stale token */ }
+}
+function loadAll() { loadTeachers(); loadPeople(); loadMine(); restoreSession(); }
 loadAll();
+if (location.hash === '#teacher') setTimeout(() => window.goTeach(), 450);
 
 /* ---------- language switcher (EN / বাংলা) ----------
    English originals are captured from the DOM at load, so only the
@@ -363,7 +421,7 @@ const BN = {
   step3t: 'পেমেন্ট করে ক্লাসে যোগ দিন', step3p: 'পেমেন্ট নিশ্চিত করুন, ক্লাসের স্ট্যাটাস দেখুন — Pending → Confirm → Ongoing → Done — আর ক্লাস লিংক দিয়ে যোগ দিন।',
   startNow: 'এখনই শুরু করুন →',
   studentEyebrow: '— ছাত্রদের জন্য', findTitle: 'আমাদের <span class="u-line">শিক্ষকগণ</span>।',
-  findSub: 'উপরের <b>আমার সাহায্য লাগবে</b> অংশে আপনার টপিক জানান — microedu আপনার জন্য সঠিক শিক্ষক সাজেস্ট করে ক্লাসের ব্যবস্থা করবে। অথবা নিচে আমাদের শিক্ষকদের দেখে <b>Request</b> চাপুন। রিকোয়েস্ট পাঠালেই রেট জানানো হবে।',
+  findSub: '<b>আমার সাহায্য লাগবে</b> অংশে আপনার টপিক জানান — microedu আপনার জন্য সঠিক শিক্ষক সাজেস্ট করে ক্লাসের ব্যবস্থা করবে। নিচে আমাদের শিক্ষকদের দেখুন; রিকোয়েস্ট করতে I Need Help ব্যবহার করুন অথবা সেখানে নাম দিয়ে শিক্ষক খুঁজুন। রিকোয়েস্ট পাঠালেই রেট জানানো হবে।',
   reqCardTitle: 'আপনার কীসে সাহায্য দরকার?',
   lblLevel: 'লেভেল', lblSubject: 'বিষয়', lblChapter: 'অধ্যায়', lblTopic: 'টপিক', lblHours: 'ঘণ্টা', lblYourTime: 'আপনার ফ্রি সময়',
   phTime: 'আজ সন্ধ্যা ৭টা', estTotal: 'আনুমানিক মোট:', estNote: '(চূড়ান্ত মূল্য নির্ভর করবে আপনার শিক্ষকের নিজের রেটের ওপর)',

@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>I Need Help — microedu.com | Get a teacher for your exact topic</title>
+<meta name="description" content="microedu.com — Micro Edu. Support. Get live 1-to-1 online tuition help on any part of any subject, from verified teachers in Bangladesh. Pay in advance by bKash, full refund if there is a problem.">
+<link rel="icon" type="image/svg+xml" href="/logo.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<div class="announce" data-i18n-html="announce">Pay in advance by <b>bKash</b> &nbsp;·&nbsp; Full refund if there is a problem &nbsp;·&nbsp; Help on any part of any subject, at any time</div>
+
+<header class="topbar">
+  <div class="wrap topbar-in">
+    <a class="brand" href="index.html" aria-label="microedu.com home">
+      <img src="/logo.svg" alt="" class="brand-mark">
+      <span class="brand-name">micro<span class="b-teal">edu</span><span class="b-orange">.com</span></span>
+    </a>
+    <nav class="nav">
+      <a href="help.html" data-i18n="navHelp">I Need Help</a>
+      <a href="teachers.html" data-i18n="navFind">Our Teachers</a>
+      <a href="plans.html" data-i18n="navSub">Subscription</a>
+    </nav>
+    <div class="top-actions">
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button type="button" id="langEn" class="sel">EN</button>
+        <button type="button" id="langBn">বাংলা</button>
+      </div>
+      <a class="btn btn-ghost" href="dashboard.html" data-i18n="signInBtn">Sign In</a>
+      <a class="btn btn-primary" href="register.html" data-i18n="joinFree">Join Free</a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- I NEED HELP: describe the problem, get teacher suggestions -->
+  <section id="help" class="section grey">
+    <div class="wrap">
+      <p class="eyebrow center" data-i18n="helpEyebrow">— I need help</p>
+      <h2 class="center" data-i18n-html="helpTitle">Tell us where you are <span class="u-line">stuck</span>.</h2>
+      <p class="sub center" data-i18n-html="helpSub">Write your level, subject and the exact topic. microedu will suggest the teachers who match — then send your request to microedu, we finalize it from both sides and organize your meeting. There is no direct contact before that.</p>
+
+      <div class="card request-card">
+        <h3 data-i18n="reqCardTitle">What do you need help with?</h3>
+        <div class="row">
+          <div><label data-i18n="lblLevel">Level</label><input id="qLevel" value="Honors"></div>
+          <div><label data-i18n="lblSubject">Subject</label><input id="qSubject" value="Statistics+Excel"></div>
+        </div>
+        <div class="row">
+          <div><label data-i18n="lblChapter">Chapter</label><input id="qChapter" value="Graphs in Excel"></div>
+          <div><label data-i18n="lblTopic">Topic</label><input id="qTopic" value="Bar Chart, Pie Chart, Scatter Plot"></div>
+        </div>
+        <div class="row">
+          <div><label data-i18n="lblHours">Hours</label><input id="qHours" type="number" value="1" min="1"></div>
+          <div><label data-i18n="lblYourTime">Your available time</label><input id="qTime" data-i18n-ph="phTime" placeholder="Today 7pm"></div>
+        </div>
+        <div class="row">
+          <div><label data-i18n="lblClassTime">Class date &amp; time</label><input id="qStart" type="datetime-local"></div>
+          <div><label>&nbsp;</label><p class="muted" style="margin:0" data-i18n="joinNote">The class link stays hidden — you and your teacher enter with the Join Class button, only at this time.</p></div>
+        </div>
+        <p class="total-line"><span data-i18n="estTotal">Estimated total:</span> <b id="qTotal">BDT 500</b> <span class="muted" data-i18n="estNote">(final amount uses your teacher's own rate)</span></p>
+        <p><button class="btn btn-orange btn-lg" type="button" id="suggestBtn" data-i18n="suggestBtn">✨ Suggest teachers for me</button></p>
+        <div class="msg" id="reqMsg"></div>
+      </div>
+
+      <h3 class="list-title hidden" id="suggestTitle" data-i18n="suggestTitle">Suggested for you</h3>
+      <div class="grid" id="suggestList"></div>
+
+      <div class="card hidden" id="suggestActions">
+        <h3>Send your request</h3>
+        <p class="muted">Your request goes to microedu — we finalize it from both sides and organize your meeting. There is no direct contact before that.</p>
+        <p style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-orange" type="button" onclick="sendToAll()">📨 Send to all suggested teachers</button>
+          <button class="btn btn-primary" type="button" onclick="sendToTop(3)">⭐ Send to top 3 (priority)</button>
+          <button class="btn btn-ghost" type="button" onclick="microeduChoose()">🤝 Let microedu choose for me</button>
+        </p>
+        <div class="msg" id="bulkMsg"></div>
+      </div>
+
+      <div class="card">
+        <h3>Know your teacher? Search by name</h3>
+        <div class="row"><div><label>Teacher's name</label><input id="tSearch" placeholder="Type part of a name — e.g. Sabrina"></div></div>
+        <div class="grid" id="searchList" style="margin-top:12px"></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <div class="foot-col">
+      <a class="brand light" href="index.html"><img src="/logo.svg" alt="" class="brand-mark"><span class="brand-name">micro<span class="b-teal">edu</span><span class="b-orange">.com</span></span></a>
+      <p data-i18n="footAbout">Micro Edu. Support — direct online tuition support on any part of any subject, at any time, from verified teachers across Bangladesh.</p>
+    </div>
+    <div class="foot-col">
+      <h4 data-i18n="footExplore">Explore</h4>
+      <a href="index.html#how" data-i18n="navHow">How it works</a>
+      <a href="teachers.html" data-i18n="navFind">Our Teachers</a>
+      <a href="plans.html" data-i18n="navSub">Subscription</a>
+      <a href="register.html" data-i18n="regLink">Registration</a>
+      <a href="teachers.html#people" data-i18n="navPeople">Registered People</a>
+    </div>
+    <div class="foot-col">
+      <h4 data-i18n="footKnow">Good to know</h4>
+      <p data-i18n="know1">💳 Payment in advance by bKash</p>
+      <p data-i18n="know2">🛡️ Full refund if there is a problem</p>
+      <p data-i18n="know3">📍 Dhaka, Bangladesh</p>
+      <p data-i18n="know4">🕒 Support at your available time</p>
+    </div>
+  </div>
+  <div class="foot-bar wrap"><span data-i18n="footCopy">© 2026 microedu.com — Micro Edu. Support</span><span data-i18n="footTag">Learn and teach from the same account</span></div>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>

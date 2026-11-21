@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Register Free — microedu.com | Join Micro Edu. Support</title>
+<meta name="description" content="microedu.com — Micro Edu. Support. Get live 1-to-1 online tuition help on any part of any subject, from verified teachers in Bangladesh. Pay in advance by bKash, full refund if there is a problem.">
+<link rel="icon" type="image/svg+xml" href="/logo.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<div class="announce" data-i18n-html="announce">Pay in advance by <b>bKash</b> &nbsp;·&nbsp; Full refund if there is a problem &nbsp;·&nbsp; Help on any part of any subject, at any time</div>
+
+<header class="topbar">
+  <div class="wrap topbar-in">
+    <a class="brand" href="index.html" aria-label="microedu.com home">
+      <img src="/logo.svg" alt="" class="brand-mark">
+      <span class="brand-name">micro<span class="b-teal">edu</span><span class="b-orange">.com</span></span>
+    </a>
+    <nav class="nav">
+      <a href="help.html" data-i18n="navHelp">I Need Help</a>
+      <a href="teachers.html" data-i18n="navFind">Our Teachers</a>
+      <a href="plans.html" data-i18n="navSub">Subscription</a>
+    </nav>
+    <div class="top-actions">
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button type="button" id="langEn" class="sel">EN</button>
+        <button type="button" id="langBn">বাংলা</button>
+      </div>
+      <a class="btn btn-ghost" href="dashboard.html" data-i18n="signInBtn">Sign In</a>
+      <a class="btn btn-primary" href="register.html" data-i18n="joinFree">Join Free</a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- JOIN AS TEACHER -->
+  <section class="section">
+    <div class="wrap split">
+      <div class="split-art"><img src="/images/group.webp" alt="Bangladeshi students learning together"></div>
+      <div class="split-text">
+        <p class="eyebrow" data-i18n="joinEyebrow">— Join us as a teacher</p>
+        <h2 data-i18n-html="joinTitle">Teach what you know.<br>Get <span class="u-line">paid</span> for it.</h2>
+        <p class="sub" data-i18n="joinSub">Register free in one minute, then complete your teacher profile from your dashboard. Set your own rate — hourly, bidding, or completely free. Teach free and the time goes to your time bank, to spend learning from other teachers.</p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="register.html" data-i18n="regTeacherBtn">Register as a Teacher →</a>
+          <a class="btn btn-white" href="index.html#how" data-i18n="navHow">How it works</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- REGISTER -->
+<section id="register" class="section grey">
+    <div class="wrap">
+      <p class="eyebrow center" data-i18n="regEyebrow">— Registration</p>
+      <h2 class="center" data-i18n-html="regTitle">Register <span class="u-line">now</span>.</h2>
+      <p class="sub center" data-i18n="regSub">Just your name, email and phone — register in one minute and start learning right away. No student/teacher label. Want to teach? Complete your teacher profile later, from your dashboard.</p>
+      <div class="card narrow">
+        <form id="regForm">
+          <div class="row"><div><label data-i18n="lblFullName">Full name *</label><input id="rName" required data-i18n-ph="phName" placeholder="Your full name"></div>
+          <div><label data-i18n="lblEmail">Email *</label><input id="rEmail" type="email" required data-i18n-ph="phEmail" placeholder="you@example.com"></div></div>
+          <div class="row"><div><label data-i18n="lblPassword">Password *</label><input id="rPass" type="password" required data-i18n-ph="phPass" placeholder="Choose a password"></div>
+          <div><label data-i18n="lblPassword2">Retype password *</label><input id="rPass2" type="password" required data-i18n-ph="phPass2" placeholder="Same password again"></div></div>
+          <div class="row"><div><label data-i18n="lblPhone">Phone</label><input id="rPhone" data-i18n-ph="phPhone" placeholder="01XXXXXXXXX"></div>
+          <div><label data-i18n="lblMobile">Mobile</label><input id="rMobile" data-i18n-ph="phPhone" placeholder="01XXXXXXXXX"></div></div>
+
+          <label data-i18n="photoQ">How do you want to appear?</label>
+          <div class="optgroup" id="photoModeGroup">
+            <label><input type="radio" name="photoMode" value="personal" checked><span class="opt"><span data-i18n="photoPersonal">My photo</span><small data-i18n="photoPersonalSub">Your own profile photo</small></span></label>
+            <label><input type="radio" name="photoMode" value="group"><span class="opt"><span data-i18n="photoGroup">Group photo</span><small data-i18n="photoGroupSub">For a group / team</small></span></label>
+            <label><input type="radio" name="photoMode" value="anonymous"><span class="opt"><span data-i18n="photoAnon">Anonymous</span><small data-i18n="photoAnonSub">Name &amp; photo stay hidden</small></span></label>
+          </div>
+          <div class="row">
+            <div><label data-i18n="lblPhoto">Photo</label><input id="rPhotoFile" type="file" accept="image/*"><img id="photoPreview" class="photo-preview" alt=""></div>
+            <div><label data-i18n="lblGroupName">Group name (if group photo)</label><input id="rGroupName" data-i18n-ph="phGroupName" placeholder="e.g. Dhaka Study Circle"></div>
+          </div>
+
+          <p class="muted" data-i18n="regNote">That's all for now — you can learn from any teacher with this account. To teach, complete your teacher profile from your dashboard after signing in.</p>
+          <p><button class="btn btn-primary btn-lg" type="submit" data-i18n="regSubmit">Register — it's free</button></p>
+          <div class="msg" id="regMsg"></div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <div class="foot-col">
+      <a class="brand light" href="index.html"><img src="/logo.svg" alt="" class="brand-mark"><span class="brand-name">micro<span class="b-teal">edu</span><span class="b-orange">.com</span></span></a>
+      <p data-i18n="footAbout">Micro Edu. Support — direct online tuition support on any part of any subject, at any time, from verified teachers across Bangladesh.</p>
+    </div>
+    <div class="foot-col">
+      <h4 data-i18n="footExplore">Explore</h4>
+      <a href="index.html#how" data-i18n="navHow">How it works</a>
+      <a href="teachers.html" data-i18n="navFind">Our Teachers</a>
+      <a href="plans.html" data-i18n="navSub">Subscription</a>
+      <a href="register.html" data-i18n="regLink">Registration</a>
+      <a href="teachers.html#people" data-i18n="navPeople">Registered People</a>
+    </div>
+    <div class="foot-col">
+      <h4 data-i18n="footKnow">Good to know</h4>
+      <p data-i18n="know1">💳 Payment in advance by bKash</p>
+      <p data-i18n="know2">🛡️ Full refund if there is a problem</p>
+      <p data-i18n="know3">📍 Dhaka, Bangladesh</p>
+      <p data-i18n="know4">🕒 Support at your available time</p>
+    </div>
+  </div>
+  <div class="foot-bar wrap"><span data-i18n="footCopy">© 2026 microedu.com — Micro Edu. Support</span><span data-i18n="footTag">Learn and teach from the same account</span></div>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>

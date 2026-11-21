@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Dashboard — microedu.com</title>
+<meta name="description" content="microedu.com — Micro Edu. Support. Get live 1-to-1 online tuition help on any part of any subject, from verified teachers in Bangladesh. Pay in advance by bKash, full refund if there is a problem.">
+<link rel="icon" type="image/svg+xml" href="/logo.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<div class="announce" data-i18n-html="announce">Pay in advance by <b>bKash</b> &nbsp;·&nbsp; Full refund if there is a problem &nbsp;·&nbsp; Help on any part of any subject, at any time</div>
+
+<header class="topbar">
+  <div class="wrap topbar-in">
+    <a class="brand" href="index.html" aria-label="microedu.com home">
+      <img src="/logo.svg" alt="" class="brand-mark">
+      <span class="brand-name">micro<span class="b-teal">edu</span><span class="b-orange">.com</span></span>
+    </a>
+    <nav class="nav">
+      <a href="help.html" data-i18n="navHelp">I Need Help</a>
+      <a href="teachers.html" data-i18n="navFind">Our Teachers</a>
+      <a href="plans.html" data-i18n="navSub">Subscription</a>
+    </nav>
+    <div class="top-actions">
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button type="button" id="langEn" class="sel">EN</button>
+        <button type="button" id="langBn">বাংলা</button>
+      </div>
+      <a class="btn btn-ghost" href="dashboard.html" data-i18n="signInBtn">Sign In</a>
+      <a class="btn btn-primary" href="register.html" data-i18n="joinFree">Join Free</a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- DASHBOARD -->
+  <section id="signin" class="section">
+    <div class="wrap">
+      <div class="card narrow">
+        <form id="signForm">
+          <div class="row"><div><label data-i18n="lblEmail">Email</label><input id="sEmail" type="email" required data-i18n-ph="phEmail" placeholder="you@example.com"></div>
+          <div><label data-i18n="lblPassword">Password</label><input id="sPass" type="password" required data-i18n-ph="phYourPass" placeholder="Your password"></div></div>
+          <p><button class="btn btn-primary" type="submit" data-i18n="signInBtn">Sign In</button>
+          <button class="btn btn-ghost" type="button" id="signOut" data-i18n="signOutBtn">Sign Out</button></p>
+          <div class="msg" id="signMsg"></div>
+        </form>
+        <div id="profileBox" class="hidden">
+          <h3 data-i18n="myProfile">My profile</h3>
+          <div id="profileContent"></div>
+        </div>
+      </div>
+
+      <div class="card narrow hidden" id="teacherCard">
+        <h3 data-i18n="teacherCardTitle">👩‍🏫 Become a teacher — complete your profile</h3>
+        <p class="muted" data-i18n="teacherCardNote">Every field is required — teachers carry responsibility for their students. Once saved, you appear in the teacher list with your own rate. There is no price ceiling: charge hourly, by bidding, or teach completely free.</p>
+        <form id="teacherForm">
+          <div class="row"><div><label data-i18n="lblEducation">Education *</label><input id="tEducation" required data-i18n-ph="phEducation" placeholder="Masters Completed / Honors Completed"></div>
+          <div><label data-i18n="lblUniversity">University / Institution *</label><input id="tUniversity" required data-i18n-ph="phUniversity" placeholder="University of Dhaka"></div></div>
+          <div class="row"><div><label data-i18n="lblProfession">Profession *</label><input id="tProfession" required data-i18n-ph="phProfession" placeholder="Teacher / Student / Engineer"></div>
+          <div><label data-i18n="lblPosition">Position</label><input id="tPosition" data-i18n-ph="phPosition" placeholder="Lecturer, SSC candidate…"></div></div>
+          <div class="row"><div><label data-i18n="lblExperience">Experience *</label><input id="tExperience" required data-i18n-ph="phExperience" placeholder="5 years teaching"></div>
+          <div><label data-i18n="lblSpeciality">Speciality / Skills *</label><input id="tSpeciality" required data-i18n-ph="phSpeciality" placeholder="Statistics, Excel, English"></div></div>
+          <div class="row"><div><label data-i18n="lblSubjects">Subjects *</label><input id="tSubjects" required data-i18n-ph="phSubjects" placeholder="Statistics, Excel"></div>
+          <div><label data-i18n="lblLevelCv">Level *</label><input id="tLevel" required data-i18n-ph="phLevelCv" placeholder="Honors / HSC / SSC"></div></div>
+          <div class="row"><div><label data-i18n="lblAddress">Address *</label><input id="tAddress" required data-i18n-ph="phAddress" placeholder="District, Division"></div>
+          <div><label data-i18n="lblAvail">Daily available time</label><input id="tAvail" data-i18n-ph="phAvail" placeholder="6pm – 10pm"></div></div>
+          <div class="row"><div><label data-i18n="lblPricing">How will you charge?</label><select id="tPricing"><option value="hourly" data-i18n="priceHourly">Hourly rate</option><option value="bidding" data-i18n="priceBidding">Bidding (students offer a price)</option><option value="free" data-i18n="priceFree">Free service</option></select></div>
+          <div><label id="tRateLabel" data-i18n="lblRate">Rate (BDT / hour)</label><input id="tRate" type="number" value="500" min="0"></div></div>
+          <label data-i18n="lblExpTime">Expertise-wise time</label><textarea id="tExpTime" rows="2" data-i18n-ph="phExpTime" placeholder="Statistics: Sat–Thu 6–8pm · Excel: Friday 10am–12pm"></textarea>
+          <label class="checkline"><input type="checkbox" id="tTimeEx"> <span data-i18n="timeExLabel">I accept time exchange — students can pay me with their time-bank credit, and my free teaching earns me time credit</span></label>
+          <div><label data-i18n="lblCvFile">CV file (file name is stored)</label><input id="tFile" type="file"></div>
+          <p><button class="btn btn-primary" type="submit" data-i18n="saveTeacherBtn">Save my teacher profile</button></p>
+          <div class="msg" id="teacherMsg"></div>
+        </form>
+      </div>
+
+      <div class="card narrow hidden" id="adminCard">
+        <h3 data-i18n="adminTitle">🛡️ microedu admin — extension requests</h3>
+        <div id="extList"></div>
+      </div>
+
+      <div class="grid two">
+        <div class="card">
+          <h3>⏳ <span data-i18n="timeBankTitle">My time bank</span></h3>
+          <p class="wallet-bal"><span data-i18n="lblTimeBalance">Time credit:</span> <b id="tbBalance">0 min</b></p>
+          <p class="muted" data-i18n="timeBankNote">Teach a free class and the time lands here. Spend it learning from teachers who accept time exchange.</p>
+          <div id="tbEntries"></div>
+        </div>
+        <div class="card">
+          <h3>💼 <span data-i18n="walletTitle">My wallet</span> <span class="muted" data-i18n="forTeachers">(teachers)</span></h3>
+          <p class="wallet-bal"><span data-i18n="lblBalance">Balance:</span> <b id="wBalance">BDT 0</b></p>
+          <div id="wEntries"></div>
+          <div class="row"><div><label data-i18n="lblWithdrawAmt">Withdraw amount (BDT)</label><input id="wAmt" type="number" min="1" placeholder="500"></div></div>
+          <p><button class="btn btn-primary" id="wBtn" data-i18n="withdrawBtn">Withdraw</button></p>
+          <div class="msg" id="wMsg"></div>
+        </div>
+        <div class="card">
+          <h3>📩 <span data-i18n="reqToMeTitle">Requests to me</span> <span class="muted" data-i18n="forTeachers">(teachers)</span></h3>
+          <div id="teacherReqs"></div>
+          <h3 class="cv-title" data-i18n="feedbackTitle">⭐ Evaluation / Feedback</h3>
+          <label data-i18n="lblGid">Class GID</label><input id="fGid" placeholder="XXXX-XXX-XXX">
+          <label data-i18n="lblComment">Comment</label><textarea id="fComment" rows="2" data-i18n-ph="phComment" placeholder="How was the class?"></textarea>
+          <label data-i18n="lblRanking">Ranking</label>
+          <div class="stars" id="fStars"><span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span></div>
+          <label data-i18n="lblComplain">Complain</label><textarea id="fComplain" rows="2" data-i18n-ph="phComplain" placeholder="Any problem? Tell us — full refund if there is a problem"></textarea>
+          <p><button class="btn btn-orange" id="fBtn" data-i18n="feedbackBtn">Submit Feedback</button></p>
+          <div class="msg" id="fMsg"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+<section class="section" style="padding-top:0">
+    <div class="wrap">
+      <div class="card">
+        <h3 data-i18n="myReqTitle">My requests</h3>
+        <div id="myRequests"></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <div class="foot-col">
+      <a class="brand light" href="index.html"><img src="/logo.svg" alt="" class="brand-mark"><span class="brand-name">micro<span class="b-teal">edu</span><span class="b-orange">.com</span></span></a>
+      <p data-i18n="footAbout">Micro Edu. Support — direct online tuition support on any part of any subject, at any time, from verified teachers across Bangladesh.</p>
+    </div>
+    <div class="foot-col">
+      <h4 data-i18n="footExplore">Explore</h4>
+      <a href="index.html#how" data-i18n="navHow">How it works</a>
+      <a href="teachers.html" data-i18n="navFind">Our Teachers</a>
+      <a href="plans.html" data-i18n="navSub">Subscription</a>
+      <a href="register.html" data-i18n="regLink">Registration</a>
+      <a href="teachers.html#people" data-i18n="navPeople">Registered People</a>
+    </div>
+    <div class="foot-col">
+      <h4 data-i18n="footKnow">Good to know</h4>
+      <p data-i18n="know1">💳 Payment in advance by bKash</p>
+      <p data-i18n="know2">🛡️ Full refund if there is a problem</p>
+      <p data-i18n="know3">📍 Dhaka, Bangladesh</p>
+      <p data-i18n="know4">🕒 Support at your available time</p>
+    </div>
+  </div>
+  <div class="foot-bar wrap"><span data-i18n="footCopy">© 2026 microedu.com — Micro Edu. Support</span><span data-i18n="footTag">Learn and teach from the same account</span></div>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>
