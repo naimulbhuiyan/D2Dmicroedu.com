@@ -120,6 +120,10 @@
           <div><label data-i18n="lblHours">Hours</label><input id="qHours" type="number" value="1" min="1"></div>
           <div><label data-i18n="lblYourTime">Your available time</label><input id="qTime" data-i18n-ph="phTime" placeholder="Today 7pm"></div>
         </div>
+        <div class="row">
+          <div><label data-i18n="lblClassTime">Class date &amp; time</label><input id="qStart" type="datetime-local"></div>
+          <div><label>&nbsp;</label><p class="muted" style="margin:0" data-i18n="joinNote">The class link stays hidden — you and your teacher enter with the Join Class button, only at this time.</p></div>
+        </div>
         <p class="total-line"><span data-i18n="estTotal">Estimated total:</span> <b id="qTotal">BDT 500</b> <span class="muted" data-i18n="estNote">(final amount uses your teacher's own rate)</span></p>
         <div class="msg" id="reqMsg"></div>
       </div>
@@ -274,6 +278,11 @@
           <h3 data-i18n="myProfile">My profile (from my CV)</h3>
           <div id="profileContent"></div>
         </div>
+      </div>
+
+      <div class="card narrow hidden" id="adminCard">
+        <h3 data-i18n="adminTitle">🛡️ microedu admin — extension requests</h3>
+        <div id="extList"></div>
       </div>
 
       <div class="grid two">

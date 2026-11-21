@@ -17,8 +17,8 @@ CREATE INDEX IF NOT EXISTS idx_people_role ON registered_people(role);
 CREATE TABLE IF NOT EXISTS cv_details(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL UNIQUE REFERENCES registered_people(id) ON DELETE CASCADE, education TEXT NOT NULL, university TEXT NOT NULL, profession TEXT NOT NULL, position TEXT, experience TEXT NOT NULL, speciality TEXT NOT NULL, subjects TEXT NOT NULL, level TEXT NOT NULL, address TEXT NOT NULL, available_time TEXT, rate_bdt_per_hour REAL NOT NULL DEFAULT 500, pricing_type TEXT DEFAULT 'hourly', expertise_time TEXT, cv_file_name TEXT);
 CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, person_id INTEGER NOT NULL REFERENCES registered_people(id) ON DELETE CASCADE, created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS subscriptions(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL REFERENCES registered_people(id) ON DELETE CASCADE, plan TEXT NOT NULL, months INTEGER NOT NULL, amount_bdt REAL NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'Pending', created_at TEXT DEFAULT (datetime('now')));
-CREATE TABLE IF NOT EXISTS tuition_requests(id INTEGER PRIMARY KEY AUTOINCREMENT, gid TEXT NOT NULL UNIQUE, student_id INTEGER NOT NULL REFERENCES registered_people(id), teacher_id INTEGER NOT NULL REFERENCES registered_people(id), level TEXT, subject TEXT NOT NULL, chapter TEXT, topic TEXT NOT NULL, hours REAL NOT NULL DEFAULT 1, rate_bdt_per_hour REAL NOT NULL DEFAULT 500, amount_bdt REAL NOT NULL, available_time TEXT, status TEXT NOT NULL DEFAULT 'Pending', class_link TEXT, created_at TEXT DEFAULT (datetime('now')));
-CREATE TABLE IF NOT EXISTS payments(id INTEGER PRIMARY KEY AUTOINCREMENT, gid TEXT NOT NULL, person_id INTEGER NOT NULL, amount_bdt REAL NOT NULL, method TEXT DEFAULT 'bKash', status TEXT NOT NULL DEFAULT 'Pending', created_at TEXT DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS tuition_requests(id INTEGER PRIMARY KEY AUTOINCREMENT, gid TEXT NOT NULL UNIQUE, student_id INTEGER NOT NULL REFERENCES registered_people(id), teacher_id INTEGER NOT NULL REFERENCES registered_people(id), level TEXT, subject TEXT NOT NULL, chapter TEXT, topic TEXT NOT NULL, hours REAL NOT NULL DEFAULT 1, rate_bdt_per_hour REAL NOT NULL DEFAULT 500, amount_bdt REAL NOT NULL, available_time TEXT, status TEXT NOT NULL DEFAULT 'Pending', class_link TEXT, class_start TEXT, extension_minutes INTEGER DEFAULT 0, extension_status TEXT DEFAULT 'None', created_at TEXT DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS payments(id INTEGER PRIMARY KEY AUTOINCREMENT, gid TEXT NOT NULL, person_id INTEGER NOT NULL, amount_bdt REAL NOT NULL, method TEXT DEFAULT 'bKash', status TEXT NOT NULL DEFAULT 'Pending', escrow_status TEXT DEFAULT 'Awaiting payment', created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS wallet_entries(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, gid TEXT, topic TEXT, amount_bdt REAL NOT NULL, kind TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS feedback_evaluation(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, gid TEXT, comment TEXT, ranking INTEGER, complain TEXT, created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS chat_messages(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER, gid TEXT, sender TEXT, message TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')));
@@ -31,6 +31,10 @@ for (const sql of [
   'ALTER TABLE registered_people ADD COLUMN group_name TEXT',
   "ALTER TABLE cv_details ADD COLUMN pricing_type TEXT DEFAULT 'hourly'",
   'ALTER TABLE cv_details ADD COLUMN expertise_time TEXT',
+  'ALTER TABLE tuition_requests ADD COLUMN class_start TEXT',
+  'ALTER TABLE tuition_requests ADD COLUMN extension_minutes INTEGER DEFAULT 0',
+  "ALTER TABLE tuition_requests ADD COLUMN extension_status TEXT DEFAULT 'None'",
+  "ALTER TABLE payments ADD COLUMN escrow_status TEXT DEFAULT 'Awaiting payment'",
 ]) { try { db.exec(sql); } catch { /* column already exists */ } }
 
 const hashPw = pw => { const s = crypto.randomBytes(16).toString('hex'); return s + ':' + crypto.scryptSync(pw, s, 64).toString('hex'); };
@@ -46,6 +50,23 @@ const pub = p => p && ({ id:p.id, role:p.role, name:p.name, email:p.email, phone
 /* Public view: anonymous members are masked — no name, contacts or photo. */
 const pubPublic = p => { const v = pub(p); if (!v) return v; if (v.photo_mode==='anonymous') return {...v, name:'Anonymous', email:null, phone:null, mobile:null, picture:null, photo_data:null, group_name:null, anonymous:true}; return v; };
 const cvOf = id => db.prepare('SELECT * FROM cv_details WHERE person_id=?').get(id);
+/* The class link is never sent in list/detail responses — it is handed out
+   only by POST /api/requests/join, inside the booked time window. */
+const stripLink = r => r && ({...r, class_link:null});
+/* Join window: opens 15 min before the booked start, closes at start +
+   booked hours + 30 min grace (+ approved extension). No class_start = no check. */
+function joinWindow(r) {
+  if (!r.class_start) return {ok:true};
+  const start = Date.parse(r.class_start);
+  if (isNaN(start)) return {ok:true};
+  const now = Date.now();
+  const open = start - 15*60000;
+  const mins = (Number(r.hours)||1)*60 + 30 + (r.extension_status==='Approved' ? (Number(r.extension_minutes)||0) : 0);
+  const close = start + mins*60000;
+  if (now < open) return {ok:false, reason:'too_early'};
+  if (now > close) return {ok:false, reason:'ended'};
+  return {ok:true, closes_at:new Date(close).toISOString()};
+}
 const walletBalance = id => { const r = db.prepare('SELECT COALESCE(SUM(amount_bdt),0) t FROM wallet_entries WHERE person_id=?').get(id); return r.t; };
 
 const routes = {
@@ -117,10 +138,10 @@ const routes = {
     if (pricing==='bidding') { const offer = Number(b.offer_amount)||0; if (offer>0) amount = offer; }
     const g = newGid();
     const link = 'https://meet.google.com/' + g;
-    const info = db.prepare('INSERT INTO tuition_requests(gid,student_id,teacher_id,level,subject,chapter,topic,hours,rate_bdt_per_hour,amount_bdt,available_time,status,class_link) VALUES(?,?,?,?,?,?,?,?,?,?,?,\'Pending\',?)')
-      .run(g,me.id,t.id,b.level||null,b.subject,b.chapter||null,b.topic,hours,rate,amount,b.available_time||null,link);
+    const info = db.prepare('INSERT INTO tuition_requests(gid,student_id,teacher_id,level,subject,chapter,topic,hours,rate_bdt_per_hour,amount_bdt,available_time,status,class_link,class_start) VALUES(?,?,?,?,?,?,?,?,?,?,?,\'Pending\',?,?)')
+      .run(g,me.id,t.id,b.level||null,b.subject,b.chapter||null,b.topic,hours,rate,amount,b.available_time||null,link,b.class_start||null);
     db.prepare('INSERT INTO payments(gid,person_id,amount_bdt,status) VALUES(?,?,?,\'Pending\')').run(g,me.id,amount);
-    send(res,201,{request: db.prepare('SELECT * FROM tuition_requests WHERE id=?').get(Number(info.lastInsertRowid))});
+    send(res,201,{request: stripLink(db.prepare('SELECT * FROM tuition_requests WHERE id=?').get(Number(info.lastInsertRowid)))});
   },
   'POST /api/payments/confirm': async (req,res) => {
     const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
@@ -130,12 +151,66 @@ const routes = {
     const next = b.status || 'Confirm';
     if (!['Confirm','Ongoing','Done'].includes(next)) return send(res,400,{error:'status must be Confirm, Ongoing or Done'});
     db.prepare('UPDATE tuition_requests SET status=? WHERE gid=?').run(next,r.gid);
-    if (next==='Confirm') db.prepare("UPDATE payments SET status='Confirm' WHERE gid=?").run(r.gid);
+    if (next==='Confirm') db.prepare("UPDATE payments SET status='Confirm', escrow_status='Held' WHERE gid=?").run(r.gid);
     if (next==='Done') {
       const exists = db.prepare("SELECT 1 FROM wallet_entries WHERE gid=? AND kind='credit'").get(r.gid);
       if (!exists) db.prepare("INSERT INTO wallet_entries(person_id,gid,topic,amount_bdt,kind) VALUES(?,?,?,?,'credit')").run(r.teacher_id,r.gid,r.topic,r.amount_bdt);
+      db.prepare("UPDATE payments SET escrow_status='Released' WHERE gid=?").run(r.gid);
     }
-    send(res,200,{request: db.prepare('SELECT * FROM tuition_requests WHERE gid=?').get(r.gid)});
+    send(res,200,{request: stripLink(db.prepare('SELECT * FROM tuition_requests WHERE gid=?').get(r.gid))});
+  },
+  /* Secure join: link returned only to this booking's own student/teacher,
+     only when confirmed, only inside the booked time window. */
+  'POST /api/requests/join': async (req,res) => {
+    const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
+    const b = await body(req);
+    const r = db.prepare('SELECT * FROM tuition_requests WHERE gid=?').get(b.gid||'');
+    if (!r) return send(res,404,{error:'Request not found'});
+    if (r.student_id!==me.id && r.teacher_id!==me.id) return send(res,403,{error:'Only this class\u2019s student and teacher can join it'});
+    if (!['Confirm','Ongoing'].includes(r.status)) return send(res,403,{error:'Class is not confirmed yet'});
+    const w = joinWindow(r);
+    if (!w.ok) return send(res,403,{error: w.reason==='too_early' ? 'Too early \u2014 the class opens 15 minutes before its booked time' : 'This class time is over \u2014 ask microedu for an extension', reason:w.reason});
+    send(res,200,{class_link:r.class_link, closes_at:w.closes_at||null});
+  },
+  /* Extra time: a participant asks, microedu (site owner, member #1) approves. */
+  'POST /api/requests/extend': async (req,res) => {
+    const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
+    const b = await body(req);
+    const r = db.prepare('SELECT * FROM tuition_requests WHERE gid=?').get(b.gid||'');
+    if (!r) return send(res,404,{error:'Request not found'});
+    if (r.student_id!==me.id && r.teacher_id!==me.id) return send(res,403,{error:'Only this class\u2019s student and teacher can ask for more time'});
+    const mins = [30,60].includes(Number(b.minutes)) ? Number(b.minutes) : 30;
+    db.prepare("UPDATE tuition_requests SET extension_status='Requested', extension_minutes=? WHERE gid=?").run(mins,r.gid);
+    send(res,200,{request: stripLink(db.prepare('SELECT * FROM tuition_requests WHERE gid=?').get(r.gid))});
+  },
+  'GET /api/extensions': (req,res) => {
+    const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
+    if (me.id!==1) return send(res,403,{error:'microedu admin only'});
+    send(res,200,{extensions: db.prepare("SELECT * FROM tuition_requests WHERE extension_status='Requested' ORDER BY id DESC").all().map(stripLink)});
+  },
+  'POST /api/requests/extend/approve': async (req,res) => {
+    const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
+    if (me.id!==1) return send(res,403,{error:'microedu admin only'});
+    const b = await body(req);
+    const r = db.prepare('SELECT * FROM tuition_requests WHERE gid=?').get(b.gid||'');
+    if (!r) return send(res,404,{error:'Request not found'});
+    db.prepare("UPDATE tuition_requests SET extension_status='Approved' WHERE gid=? AND extension_status='Requested'").run(r.gid);
+    send(res,200,{request: stripLink(db.prepare('SELECT * FROM tuition_requests WHERE gid=?').get(r.gid))});
+  },
+  /* Escrow refund: money still held with microedu returns to the student in
+     full and the booking is cancelled. Only before the class is Done. */
+  'POST /api/payments/refund': async (req,res) => {
+    const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
+    const b = await body(req);
+    const r = db.prepare('SELECT * FROM tuition_requests WHERE gid=?').get(b.gid||'');
+    if (!r) return send(res,404,{error:'Request not found'});
+    if (r.student_id!==me.id && me.id!==1) return send(res,403,{error:'Only the student of this class (or microedu) can refund it'});
+    if (r.status==='Done') return send(res,400,{error:'Class already done \u2014 the money has been released to the teacher'});
+    const pay = db.prepare('SELECT * FROM payments WHERE gid=? ORDER BY id DESC LIMIT 1').get(r.gid);
+    if (!pay || pay.escrow_status!=='Held') return send(res,400,{error:'Only money held with microedu can be refunded'});
+    db.prepare("UPDATE payments SET escrow_status='Refunded' WHERE gid=?").run(r.gid);
+    db.prepare("UPDATE tuition_requests SET status='Cancelled' WHERE gid=?").run(r.gid);
+    send(res,200,{request: stripLink(db.prepare('SELECT * FROM tuition_requests WHERE gid=?').get(r.gid)), refunded:true});
   },
   'GET /api/wallet': (req,res) => {
     const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
@@ -157,7 +232,8 @@ const routes = {
   },
   'GET /api/my-requests': (req,res) => {
     const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
-    send(res,200,{asStudent: db.prepare('SELECT * FROM tuition_requests WHERE student_id=? ORDER BY id DESC').all(me.id), asTeacher: db.prepare('SELECT * FROM tuition_requests WHERE teacher_id=? ORDER BY id DESC').all(me.id)});
+    const enrich = rows => rows.map(r => { const pay = db.prepare('SELECT escrow_status FROM payments WHERE gid=? ORDER BY id DESC LIMIT 1').get(r.gid); return {...stripLink(r), escrow_status: pay ? pay.escrow_status : 'Awaiting payment'}; });
+    send(res,200,{asStudent: enrich(db.prepare('SELECT * FROM tuition_requests WHERE student_id=? ORDER BY id DESC').all(me.id)), asTeacher: enrich(db.prepare('SELECT * FROM tuition_requests WHERE teacher_id=? ORDER BY id DESC').all(me.id))});
   },
 };
 

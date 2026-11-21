@@ -63,6 +63,9 @@ CREATE TABLE IF NOT EXISTS tuition_requests (
   available_time TEXT,
   status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending','Confirm','Ongoing','Done','Cancelled')),
   class_link TEXT,
+  class_start TEXT,
+  extension_minutes INTEGER DEFAULT 0,
+  extension_status TEXT DEFAULT 'None',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_req_student ON tuition_requests(student_id);
@@ -75,6 +78,7 @@ CREATE TABLE IF NOT EXISTS payments (
   person_id INTEGER NOT NULL REFERENCES registered_people(id) ON DELETE CASCADE,
   amount_bdt NUMERIC NOT NULL,
   method TEXT DEFAULT 'bKash',
+  escrow_status TEXT DEFAULT 'Awaiting payment',
   status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending','Confirm')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

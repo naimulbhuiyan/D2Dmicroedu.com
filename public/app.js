@@ -125,12 +125,23 @@ $('signOut').onclick = () => {
   token = ''; me = null;
   localStorage.removeItem('microedu_token'); localStorage.removeItem('d2d_token');
   $('profileBox').classList.add('hidden');
+  $('adminCard').classList.add('hidden');
   msg($('signMsg'), 'Signed out');
 };
+
+/* ---------- microedu admin: extension approvals (site owner, member #1) ---------- */
+async function loadExtensions() {
+  try {
+    const d = await api('/api/extensions');
+    $('extList').innerHTML = d.extensions.length ? d.extensions.map(r => `<div class="req-card"><p><b>GID: ${esc(r.gid)}</b> · ${esc(r.subject)} — ${esc(r.topic)}<br>+${r.extension_minutes} min requested${r.class_start ? ' · Class: ' + esc(new Date(r.class_start).toLocaleString()) : ''}</p><button class="btn btn-primary btn-sm" onclick="approveExt('${r.gid}')">Approve +${r.extension_minutes} min</button></div>`).join('') : '<p class="muted">No extension requests waiting.</p>';
+  } catch (e) { /* not the admin */ }
+}
+window.approveExt = async gid => { try { await api('/api/requests/extend/approve', { method: 'POST', body: JSON.stringify({ gid }) }); loadExtensions(); loadMine(); } catch (e) { alert(e.message); } };
 function showProfile(p, cv) {
   if (!p) return;
   $('profileBox').classList.remove('hidden');
   fillPlans(p.role);
+  if (p.id === 1) { $('adminCard').classList.remove('hidden'); loadExtensions(); }
   const appear = p.photo_mode === 'anonymous' ? '🕶️ Anonymous (public lists hide your name & photo)'
     : p.photo_mode === 'group' ? '👥 Group' + (p.group_name ? ': ' + esc(p.group_name) : '')
     : '📷 Personal photo';
@@ -179,7 +190,7 @@ async function loadTeachers() {
 }
 window.requestTeacher = async id => {
   const info = teacherPricing[id] || { pricing: 'hourly', rate: 500 };
-  const payload = { teacher_id: id, level: $('qLevel').value, subject: $('qSubject').value, chapter: $('qChapter').value, topic: $('qTopic').value, hours: $('qHours').value, available_time: $('qTime').value };
+  const payload = { teacher_id: id, level: $('qLevel').value, subject: $('qSubject').value, chapter: $('qChapter').value, topic: $('qTopic').value, hours: $('qHours').value, available_time: $('qTime').value, class_start: $('qStart').value ? new Date($('qStart').value).toISOString() : null };
   if (info.pricing === 'bidding') {
     const offer = prompt('This teacher works by bidding. Your offer for the whole class (BDT):', info.rate);
     if (offer === null) return;
@@ -187,7 +198,7 @@ window.requestTeacher = async id => {
   }
   try {
     const d = await api('/api/requests', { method: 'POST', body: JSON.stringify(payload) });
-    msg($('reqMsg'), `Request created. GID: ${d.request.gid} · Amount: BDT ${d.request.amount_bdt} · Status: Pending · Class Link: ${d.request.class_link}`);
+    msg($('reqMsg'), `Request created. GID: ${d.request.gid} · Amount: BDT ${d.request.amount_bdt} · Status: Pending — confirm payment in My Requests below. The class link stays hidden; use the Join Class button at class time.`);
     loadMine();
   } catch (e) { msg($('reqMsg'), e.message, false); }
 };
@@ -196,16 +207,32 @@ function tracker(r) {
   const cur = steps.indexOf(r.status);
   return `<span class="tracker">${steps.map((s, i) => `<b class="${i <= cur ? 'on' : ''}">${s}</b>`).join('')}</span>`;
 }
+function escrowLine(r) {
+  const m = { 'Held': ['held', 'Paid — held with microedu'], 'Released': ['released', 'Released to the teacher'], 'Refunded': ['refunded', 'Refunded to the student'] }[r.escrow_status] || ['unpaid', 'Not paid yet'];
+  return `<span class="escrow ${m[0]}">💰 BDT ${r.amount_bdt} · ${m[1]}</span>`;
+}
 async function loadMine() {
   if (!token) return;
   try {
     const d = await api('/api/my-requests');
-    const render = r => `<div class="req-card"><p><b>GID: ${esc(r.gid)}</b> · ${esc(r.subject)} — ${esc(r.topic)}<br>${r.hours} hr × BDT ${r.rate_bdt_per_hour} = <b>BDT ${r.amount_bdt}</b></p>${tracker(r)}<p>Class Link: ${esc(r.class_link || '-')}</p>${r.status !== 'Done' ? `<button class="btn btn-primary btn-sm" onclick="advance('${r.gid}','${r.status === 'Pending' ? 'Confirm' : r.status === 'Confirm' ? 'Ongoing' : 'Done'}')">${r.status === 'Pending' ? 'Confirm Payment' : r.status === 'Confirm' ? 'Start (Ongoing)' : 'Mark Done'}</button>` : ''}</div>`;
-    $('myRequests').innerHTML = d.asStudent.map(render).join('') || '<p class="muted">None yet</p>';
-    $('teacherReqs').innerHTML = d.asTeacher.map(render).join('') || '<p class="muted">None yet</p>';
+    const render = (r, mine) => {
+      const btns = [];
+      if (r.status !== 'Done' && r.status !== 'Cancelled') btns.push(`<button class="btn btn-primary btn-sm" onclick="advance('${r.gid}','${r.status === 'Pending' ? 'Confirm' : r.status === 'Confirm' ? 'Ongoing' : 'Done'}')">${r.status === 'Pending' ? 'Confirm Payment' : r.status === 'Confirm' ? 'Start (Ongoing)' : 'Mark Done'}</button>`);
+      if (['Confirm', 'Ongoing'].includes(r.status)) btns.push(`<button class="btn btn-orange btn-sm" onclick="joinClass('${r.gid}')">Join Class</button>`);
+      if (['Confirm', 'Ongoing'].includes(r.status) && r.extension_status !== 'Requested') btns.push(`<button class="btn btn-ghost btn-sm" onclick="extendReq('${r.gid}')">Request +30 min</button>`);
+      if (mine === 'student' && r.escrow_status === 'Held' && r.status !== 'Done') btns.push(`<button class="btn btn-ghost btn-sm" onclick="refundReq('${r.gid}')">Problem? Refund to me</button>`);
+      const when = r.class_start ? `<br>🗓️ ${esc(new Date(r.class_start).toLocaleString())} · ${r.hours} hr` : (r.available_time ? `<br>🗓️ ${esc(r.available_time)}` : '');
+      const ext = r.extension_status === 'Requested' ? '<p class="muted">⏳ Extension requested — waiting for microedu</p>' : r.extension_status === 'Approved' ? `<p class="muted">✅ Extra ${r.extension_minutes} min approved by microedu</p>` : '';
+      return `<div class="req-card"><p><b>GID: ${esc(r.gid)}</b> · ${esc(r.subject)} — ${esc(r.topic)}<br>${r.hours} hr × BDT ${r.rate_bdt_per_hour} = <b>BDT ${r.amount_bdt}</b>${when}</p>${tracker(r)}<p>${escrowLine(r)}</p>${ext}${btns.length ? `<p style="display:flex;gap:8px;flex-wrap:wrap">${btns.join('')}</p>` : ''}</div>`;
+    };
+    $('myRequests').innerHTML = d.asStudent.map(r => render(r, 'student')).join('') || '<p class="muted">None yet</p>';
+    $('teacherReqs').innerHTML = d.asTeacher.map(r => render(r, 'teacher')).join('') || '<p class="muted">None yet</p>';
     loadWallet();
   } catch (e) { /* not signed in */ }
 }
+window.joinClass = async gid => { try { const d = await api('/api/requests/join', { method: 'POST', body: JSON.stringify({ gid }) }); window.open(d.class_link, '_blank'); } catch (e) { alert(e.message); } };
+window.extendReq = async gid => { try { await api('/api/requests/extend', { method: 'POST', body: JSON.stringify({ gid, minutes: 30 }) }); alert('Extension requested — microedu will approve it.'); loadMine(); } catch (e) { alert(e.message); } };
+window.refundReq = async gid => { if (!confirm('Refund this class in full? The booking will be cancelled.')) return; try { await api('/api/payments/refund', { method: 'POST', body: JSON.stringify({ gid }) }); loadMine(); } catch (e) { alert(e.message); } };
 window.advance = async (gid, status) => { try { await api('/api/payments/confirm', { method: 'POST', body: JSON.stringify({ gid, status }) }); loadMine(); } catch (e) { alert(e.message); } };
 
 /* ---------- wallet & feedback ---------- */
@@ -307,6 +334,8 @@ const BN = {
   lblAddress: 'ঠিকানা *', phAddress: 'জেলা, বিভাগ',
   lblAvail: 'প্রতিদিনের ফ্রি সময়', phAvail: 'সন্ধ্যা ৬টা – রাত ১০টা',
   lblPricing: 'আপনি কীভাবে চার্জ করবেন?', priceHourly: 'ঘণ্টার রেট', priceBidding: 'বিডিং (ছাত্ররা দাম প্রস্তাব করবে)', priceFree: 'ফ্রি সার্ভিস',
+  lblClassTime: 'ক্লাসের তারিখ ও সময়', joinNote: 'ক্লাসের লিংক লুকানো থাকে — আপনি ও আপনার শিক্ষক শুধু এই সময়ে Join Class বোতাম দিয়ে ঢুকতে পারবেন।',
+  adminTitle: '🛡️ microedu অ্যাডমিন — সময় বাড়ানোর অনুরোধ',
   lblRate: 'রেট (টাকা / ঘণ্টা)',
   lblExpTime: 'বিষয়ভিত্তিক সময়', phExpTime: 'পরিসংখ্যান: শনি–বৃহস্পতি সন্ধ্যা ৬–৮টা · Excel: শুক্রবার সকাল ১০টা–১২টা',
   lblCvFile: 'সিভি ফাইল (ফাইলের নাম সংরক্ষিত হয়)', regSubmit: 'রেজিস্টার করুন — সম্পূর্ণ ফ্রি',
