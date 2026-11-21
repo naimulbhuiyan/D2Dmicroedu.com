@@ -46,16 +46,36 @@
         <form id="signForm">
           <div class="row"><div><label data-i18n="lblEmail">Email</label><input id="sEmail" type="email" required data-i18n-ph="phEmail" placeholder="you@example.com"></div>
           <div><label data-i18n="lblPassword">Password</label><input id="sPass" type="password" required data-i18n-ph="phYourPass" placeholder="Your password"></div></div>
-          <p><button class="btn btn-primary" type="submit" data-i18n="signInBtn">Sign In</button>
-          <button class="btn btn-ghost" type="button" id="signOut" data-i18n="signOutBtn">Sign Out</button></p>
+          <p><button class="btn btn-primary" type="submit" data-i18n="signInBtn">Sign In</button></p>
           <div class="msg" id="signMsg"></div>
         </form>
         <div id="profileBox" class="hidden">
           <h3 data-i18n="myProfile">My profile</h3>
           <div id="profileContent"></div>
+          <p><button class="btn btn-ghost btn-sm" type="button" id="signOut" data-i18n="signOutBtn">Sign Out</button></p>
+          <h3 class="cv-title" data-i18n="editDetailsTitle">✏️ Edit my details</h3>
+          <form id="detailsForm">
+            <div class="row"><div><label data-i18n="lblFullNamePlain">Full name</label><input id="dName"></div>
+            <div><label data-i18n="lblPhone">Phone</label><input id="dPhone"></div></div>
+            <div class="row"><div><label data-i18n="lblMobile">Mobile</label><input id="dMobile"></div>
+            <div><label data-i18n="lblAppear">How you appear</label><select id="dPhotoMode"><option value="personal" data-i18n="photoPersonal">My photo</option><option value="group" data-i18n="photoGroup">Group photo</option><option value="anonymous" data-i18n="photoAnon">Anonymous</option></select></div></div>
+            <div class="row"><div><label data-i18n="lblGroupName">Group name (if group photo)</label><input id="dGroupName"></div>
+            <div><label data-i18n="lblPhoto">New photo (optional)</label><input id="dPhotoFile" type="file" accept="image/*"></div></div>
+            <p><button class="btn btn-primary btn-sm" type="submit" data-i18n="saveDetailsBtn">Save my details</button></p>
+            <div class="msg" id="detailsMsg"></div>
+          </form>
+          <h3 class="cv-title" data-i18n="changePassTitle">🔑 Change my password</h3>
+          <form id="passForm">
+            <div class="row"><div><label data-i18n="lblCurPass">Current password</label><input id="pCurrent" type="password"></div>
+            <div><label data-i18n="lblNewPass">New password</label><input id="pNew" type="password"></div></div>
+            <div class="row"><div><label data-i18n="lblNewPass2">New password again</label><input id="pNew2" type="password"></div></div>
+            <p><button class="btn btn-primary btn-sm" type="submit" data-i18n="changePassBtn">Change password</button></p>
+            <div class="msg" id="passMsg"></div>
+          </form>
         </div>
       </div>
 
+      <div id="dashMain" class="hidden">
       <div class="card narrow hidden" id="teacherCard">
         <h3 data-i18n="teacherCardTitle">👩‍🏫 Become a teacher — complete your profile</h3>
         <p class="muted" data-i18n="teacherCardNote">Every field is required — teachers carry responsibility for their students. Once saved, you appear in the teacher list with your own rate. There is no price ceiling: charge hourly, by bidding, or teach completely free.</p>
@@ -123,6 +143,7 @@
       </div>
     </div>
   </section>
+      </div>
 
 </main>
 

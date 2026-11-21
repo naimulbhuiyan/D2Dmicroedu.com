@@ -137,6 +137,28 @@ const routes = {
     const me = auth(req); if (!me) return send(res,401,{error:'Sign in required'});
     send(res,200,{person:pub(me), cv:cvOf(me.id)});
   },
+  /* Change own password (signed in). */
+  'POST /api/me/password': async (req,res) => {
+    const me = auth(req); if (!me) return send(res,401,{error:'Sign in required'});
+    const b = await body(req);
+    if (!b.new_password || String(b.new_password).length < 6) return send(res,400,{error:'New password must be at least 6 characters'});
+    if (!verifyPw(b.current_password||'', me.password_hash)) return send(res,403,{error:'Current password is wrong'});
+    db.prepare('UPDATE registered_people SET password_hash=? WHERE id=?').run(hashPw(String(b.new_password)), me.id);
+    send(res,200,{ok:true});
+  },
+  /* Update own basic details (name, phone, mobile, appearance/photo). */
+  'POST /api/me/update': async (req,res) => {
+    const me = auth(req); if (!me) return send(res,401,{error:'Sign in required'});
+    const b = await body(req);
+    const name = (b.name||'').trim() || me.name;
+    const photoMode = ['personal','group','anonymous'].includes(b.photo_mode) ? b.photo_mode : (me.photo_mode||'personal');
+    let photoData = me.photo_data || null;
+    if (photoMode === 'anonymous') photoData = null;
+    else if (typeof b.photo_data === 'string' && b.photo_data.startsWith('data:image/') && b.photo_data.length <= 500000) photoData = b.photo_data;
+    db.prepare('UPDATE registered_people SET name=?,phone=?,mobile=?,photo_data=?,photo_mode=?,group_name=? WHERE id=?')
+      .run(name, b.phone !== undefined ? (b.phone||null) : me.phone, b.mobile !== undefined ? (b.mobile||null) : me.mobile, photoData, photoMode, photoMode === 'group' ? (b.group_name||null) : null, me.id);
+    send(res,200,{person:pub(db.prepare('SELECT * FROM registered_people WHERE id=?').get(me.id)), cv:cvOf(me.id)});
+  },
   'GET /api/people': (req,res) => {
     const people = db.prepare('SELECT * FROM registered_people ORDER BY id').all().map(p => ({...pubPublic(p), cv:cvOf(p.id), subscription: db.prepare("SELECT * FROM subscriptions WHERE person_id=? ORDER BY id DESC LIMIT 1").get(p.id)||null }));
     const teachersCount = db.prepare('SELECT COUNT(*) c FROM cv_details WHERE teacher_ready=1').get().c;

@@ -400,6 +400,35 @@ const routes = {
     return send({ person: pub(me), cv: await cvOf(db, me.id) }, 200);
   },
 
+  /* Change own password (signed in). Members receive a simple starter
+     password from microedu and can replace it with their own here. */
+  'POST /api/me/password': async (request, db) => {
+    const me = await auth(request, db); if (!me) return send({ error: 'Sign in required' }, 401);
+    const b = await body(request);
+    if (!b.new_password || String(b.new_password).length < 6) return send({ error: 'New password must be at least 6 characters' }, 400);
+    if (!(await verifyPw(b.current_password || '', me.password_hash))) return send({ error: 'Current password is wrong' }, 403);
+    await db.prepare('UPDATE registered_people SET password_hash=? WHERE id=?').bind(await hashPw(String(b.new_password)), me.id).run();
+    return send({ ok: true }, 200);
+  },
+
+  /* Update own basic details: name, phone, mobile and how the member
+     appears (personal photo / group photo / anonymous). Teacher/CV fields
+     are updated through /api/teacher-profile. A new photo is applied only
+     when a fresh data URL is sent; anonymous always drops the photo. */
+  'POST /api/me/update': async (request, db) => {
+    const me = await auth(request, db); if (!me) return send({ error: 'Sign in required' }, 401);
+    const b = await body(request);
+    const name = (b.name || '').trim() || me.name;
+    const photoMode = ['personal', 'group', 'anonymous'].includes(b.photo_mode) ? b.photo_mode : (me.photo_mode || 'personal');
+    let photoData = me.photo_data || null;
+    if (photoMode === 'anonymous') photoData = null;
+    else if (typeof b.photo_data === 'string' && b.photo_data.startsWith('data:image/') && b.photo_data.length <= 500000) photoData = b.photo_data;
+    await db.prepare('UPDATE registered_people SET name=?,phone=?,mobile=?,photo_data=?,photo_mode=?,group_name=? WHERE id=?')
+      .bind(name, b.phone !== undefined ? (b.phone || null) : me.phone, b.mobile !== undefined ? (b.mobile || null) : me.mobile, photoData, photoMode, photoMode === 'group' ? (b.group_name || null) : null, me.id).run();
+    const person = await db.prepare('SELECT * FROM registered_people WHERE id=?').bind(me.id).first();
+    return send({ person: pub(person), cv: await cvOf(db, me.id) }, 200);
+  },
+
   'GET /api/people': async (request, db) => {
     const rows = (await db.prepare('SELECT * FROM registered_people ORDER BY id').all()).results;
     const people = [];

@@ -166,9 +166,56 @@ on('signForm', 'onsubmit', async e => {
 on('signOut', 'onclick', () => {
   token = ''; me = null; myTimeBalance = 0;
   localStorage.removeItem('microedu_token'); localStorage.removeItem('d2d_token');
-  hideEl('profileBox'); hideEl('teacherCard'); hideEl('adminCard');
+  hideEl('profileBox'); hideEl('teacherCard'); hideEl('adminCard'); hideEl('dashMain');
+  const sf = $('signForm'); if (sf) sf.classList.remove('hidden');
   msg($('signMsg'), 'Signed out');
 });
+
+/* ---------- edit my details & change password (dashboard) ---------- */
+let dPhotoDataUrl = '';
+on('dPhotoFile', 'onchange', () => {
+  const f = $('dPhotoFile').files[0];
+  if (!f) return;
+  const img = new Image();
+  img.onload = () => {
+    const max = 480, scale = Math.min(1, max / Math.max(img.width, img.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    dPhotoDataUrl = c.toDataURL('image/jpeg', 0.82);
+    URL.revokeObjectURL(img.src);
+  };
+  img.src = URL.createObjectURL(f);
+});
+on('detailsForm', 'onsubmit', async e => {
+  e.preventDefault();
+  const payload = { name: $('dName').value, phone: $('dPhone').value, mobile: $('dMobile').value, photo_mode: $('dPhotoMode').value, group_name: $('dGroupName').value };
+  if (dPhotoDataUrl) payload.photo_data = dPhotoDataUrl;
+  try {
+    const d = await api('/api/me/update', { method: 'POST', body: JSON.stringify(payload) });
+    me = d.person; dPhotoDataUrl = '';
+    showProfile(d.person, d.cv);
+    msg($('detailsMsg'), 'Your details are saved.');
+    loadAll();
+  } catch (err) { msg($('detailsMsg'), err.message, false); }
+});
+on('passForm', 'onsubmit', async e => {
+  e.preventDefault();
+  if ($('pNew').value !== $('pNew2').value) return msg($('passMsg'), 'The two new passwords do not match', false);
+  try {
+    await api('/api/me/password', { method: 'POST', body: JSON.stringify({ current_password: $('pCurrent').value, new_password: $('pNew').value }) });
+    $('pCurrent').value = ''; $('pNew').value = ''; $('pNew2').value = '';
+    msg($('passMsg'), 'Password changed. Use the new password next time you sign in.');
+  } catch (err) { msg($('passMsg'), err.message, false); }
+});
+function prefillDetailsForm(p) {
+  if (!p || !$('dName')) return;
+  $('dName').value = p.name || '';
+  $('dPhone').value = p.phone || '';
+  $('dMobile').value = p.mobile || '';
+  $('dPhotoMode').value = p.photo_mode || 'personal';
+  $('dGroupName').value = p.group_name || '';
+}
 
 /* ---------- microedu admin: extension approvals (site owner, member #1) ---------- */
 async function loadExtensions() {
@@ -181,6 +228,12 @@ window.approveExt = async gid => { try { await api('/api/requests/extend/approve
 function showProfile(p, cv) {
   if (!p || !$('profileBox')) return;
   $('profileBox').classList.remove('hidden');
+  /* Signed in: the sign-in form goes away and the full dashboard page
+     (teacher profile, wallet, time bank, requests) opens. Logged out,
+     none of it is shown at all. */
+  hideEl('dashMain', false);
+  const sf = $('signForm'); if (sf) sf.classList.add('hidden');
+  prefillDetailsForm(p);
   hideEl('teacherCard', false);
   fillPlans();
   if (p.id === 1) { hideEl('adminCard', false); loadExtensions(); }
@@ -470,6 +523,10 @@ const BN = {
   lblExpTime: 'বিষয়ভিত্তিক সময়', phExpTime: 'পরিসংখ্যান: শনি–বৃহস্পতি সন্ধ্যা ৬–৮টা · Excel: শুক্রবার সকাল ১০টা–১২টা',
   lblCvFile: 'সিভি ফাইল (ফাইলের নাম সংরক্ষিত হয়)', regSubmit: 'রেজিস্টার করুন — সম্পূর্ণ ফ্রি',
   dashEyebrow: '— আমার ড্যাশবোর্ড', dashTitle: 'আবার <span class="u-line">স্বাগতম</span>।',
+  editDetailsTitle: '✏️ আমার তথ্য বদলান', changePassTitle: '🔑 পাসওয়ার্ড বদলান',
+  lblFullNamePlain: 'পুরো নাম', lblAppear: 'আপনি কীভাবে দেখাবেন',
+  lblCurPass: 'বর্তমান পাসওয়ার্ড', lblNewPass: 'নতুন পাসওয়ার্ড', lblNewPass2: 'নতুন পাসওয়ার্ড আবার',
+  saveDetailsBtn: 'আমার তথ্য সেভ করুন', changePassBtn: 'পাসওয়ার্ড বদলান',
   phYourPass: 'আপনার পাসওয়ার্ড', signOutBtn: 'সাইন আউট', myProfile: 'আমার প্রোফাইল (আমার সিভি থেকে)',
   walletTitle: 'আমার ওয়ালেট', forTeachers: '(শিক্ষকদের জন্য)', lblBalance: 'ব্যালেন্স:',
   lblWithdrawAmt: 'উত্তোলনের পরিমাণ (টাকা)', withdrawBtn: 'উত্তোলন করুন',
