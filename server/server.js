@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, person_id INTEGER NO
 CREATE TABLE IF NOT EXISTS subscriptions(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL REFERENCES registered_people(id) ON DELETE CASCADE, plan TEXT NOT NULL, months INTEGER NOT NULL, amount_bdt REAL NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'Pending', created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS tuition_requests(id INTEGER PRIMARY KEY AUTOINCREMENT, gid TEXT NOT NULL UNIQUE, student_id INTEGER NOT NULL REFERENCES registered_people(id), teacher_id INTEGER NOT NULL REFERENCES registered_people(id), level TEXT, subject TEXT NOT NULL, chapter TEXT, topic TEXT NOT NULL, hours REAL NOT NULL DEFAULT 1, rate_bdt_per_hour REAL NOT NULL DEFAULT 500, amount_bdt REAL NOT NULL, available_time TEXT, pay_with TEXT DEFAULT 'money', status TEXT NOT NULL DEFAULT 'Pending', class_link TEXT, class_start TEXT, extension_minutes INTEGER DEFAULT 0, extension_status TEXT DEFAULT 'None', created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS time_entries(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, gid TEXT, topic TEXT, minutes INTEGER NOT NULL, kind TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS password_resets(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, email TEXT NOT NULL, done INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS payments(id INTEGER PRIMARY KEY AUTOINCREMENT, gid TEXT NOT NULL, person_id INTEGER NOT NULL, amount_bdt REAL NOT NULL, method TEXT DEFAULT 'bKash', status TEXT NOT NULL DEFAULT 'Pending', escrow_status TEXT DEFAULT 'Awaiting payment', created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS wallet_entries(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, gid TEXT, topic TEXT, amount_bdt REAL NOT NULL, kind TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS feedback_evaluation(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, gid TEXT, comment TEXT, ranking INTEGER, complain TEXT, created_at TEXT DEFAULT (datetime('now')));
@@ -41,6 +42,7 @@ for (const sql of [
   "ALTER TABLE tuition_requests ADD COLUMN pay_with TEXT DEFAULT 'money'",
   'CREATE TABLE IF NOT EXISTS time_entries(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, gid TEXT, topic TEXT, minutes INTEGER NOT NULL, kind TEXT NOT NULL, created_at TEXT DEFAULT (datetime(\'now\')))',
   "UPDATE cv_details SET teacher_ready=1 WHERE teacher_ready=0 AND subjects IS NOT NULL AND subjects<>''",
+  "CREATE TABLE IF NOT EXISTS password_resets(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, email TEXT NOT NULL, done INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')))",
 ]) { try { db.exec(sql); } catch { /* column already exists */ } }
 
 const hashPw = pw => { const s = crypto.randomBytes(16).toString('hex'); return s + ':' + crypto.scryptSync(pw, s, 64).toString('hex'); };
@@ -127,11 +129,50 @@ const routes = {
   },
   'POST /api/signin': async (req,res) => {
     const b = await body(req);
-    const p = db.prepare('SELECT * FROM registered_people WHERE email=?').get(b.email||'');
+    /* Sign in with the email address OR the numeric member ID. */
+    const ident = String(b.email||'').trim();
+    const p = /^\d+$/.test(ident)
+      ? db.prepare('SELECT * FROM registered_people WHERE id=?').get(Number(ident))
+      : db.prepare('SELECT * FROM registered_people WHERE LOWER(email)=LOWER(?)').get(ident);
     if (!p || !verifyPw(b.password||'', p.password_hash)) return send(res,401,{found:false,error:'Invalid email or password'});
     const token = crypto.randomBytes(24).toString('hex');
     db.prepare('INSERT INTO sessions(token,person_id) VALUES(?,?)').run(token,p.id);
     send(res,200,{found:true, person:pub(p), cv:cvOf(p.id), token});
+  },
+  /* Forgot password: request lands in the site owner's admin card;
+     microedu resets the account to the starter password (micro1234) and
+     tells the member on Gmail. Same response whether the email exists. */
+  'POST /api/password/forgot': async (req,res) => {
+    const b = await body(req);
+    const email = String(b.email||'').trim();
+    if (email) {
+      const p = db.prepare('SELECT * FROM registered_people WHERE LOWER(email)=LOWER(?)').get(email);
+      if (p && !db.prepare('SELECT 1 FROM password_resets WHERE person_id=? AND done=0').get(p.id))
+        db.prepare('INSERT INTO password_resets(person_id,email) VALUES(?,?)').run(p.id, p.email);
+    }
+    send(res,200,{ok:true});
+  },
+  'GET /api/password-resets': (req,res) => {
+    const me = auth(req); if (!me) return send(res,401,{error:'Sign in required'});
+    if (me.id!==1) return send(res,403,{error:'microedu admin only'});
+    send(res,200,{resets: db.prepare('SELECT r.id, r.person_id, r.email, r.created_at, p.name FROM password_resets r JOIN registered_people p ON p.id=r.person_id WHERE r.done=0 ORDER BY r.id').all()});
+  },
+  'POST /api/password-resets/reset': async (req,res) => {
+    const me = auth(req); if (!me) return send(res,401,{error:'Sign in required'});
+    if (me.id!==1) return send(res,403,{error:'microedu admin only'});
+    const b = await body(req);
+    const r = db.prepare('SELECT * FROM password_resets WHERE id=? AND done=0').get(Number(b.id)||0);
+    if (!r) return send(res,404,{error:'Request not found'});
+    db.prepare('UPDATE registered_people SET password_hash=? WHERE id=?').run(hashPw('micro1234'), r.person_id);
+    db.prepare('UPDATE password_resets SET done=1 WHERE id=?').run(r.id);
+    send(res,200,{ok:true, email:r.email});
+  },
+  'POST /api/password-resets/dismiss': async (req,res) => {
+    const me = auth(req); if (!me) return send(res,401,{error:'Sign in required'});
+    if (me.id!==1) return send(res,403,{error:'microedu admin only'});
+    const b = await body(req);
+    db.prepare('UPDATE password_resets SET done=1 WHERE id=?').run(Number(b.id)||0);
+    send(res,200,{ok:true});
   },
   'GET /api/me': (req,res) => {
     const me = auth(req); if (!me) return send(res,401,{error:'Sign in required'});

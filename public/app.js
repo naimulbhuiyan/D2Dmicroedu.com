@@ -163,10 +163,35 @@ on('signForm', 'onsubmit', async e => {
     loadAll();
   } catch (err) { msg($('signMsg'), err.message, false); }
 });
+/* ---------- forgot password (request goes to microedu admin) ---------- */
+on('forgotToggle', 'onclick', () => { const f = $('forgotForm'); if (f) f.classList.toggle('hidden'); });
+on('forgotForm', 'onsubmit', async e => {
+  e.preventDefault();
+  try {
+    await api('/api/password/forgot', { method: 'POST', body: JSON.stringify({ email: $('fpEmail').value }) });
+    msg($('forgotMsg'), 'Request sent. If this email is registered, microedu will reset your password and inform you on Gmail.');
+  } catch (err) { msg($('forgotMsg'), err.message, false); }
+});
+
+/* ---------- microedu admin: password reset requests ---------- */
+async function loadPwResets() {
+  try {
+    const d = await api('/api/password-resets');
+    setHtml('pwResetList', d.resets.length ? d.resets.map(r => `<div class="req-card"><p><b>#${r.person_id} ${esc(r.name)}</b> · ${esc(r.email)}<br><span class="muted">Asked: ${esc(String(r.created_at || ''))}</span></p><p style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="resetPw(${r.id})">Reset password to micro1234</button><button class="btn btn-ghost btn-sm" onclick="dismissPw(${r.id})">Dismiss</button></p></div>`).join('') : '<p class="muted">No password reset requests waiting.</p>');
+  } catch (e) { /* not the admin */ }
+}
+window.resetPw = async id => { try { const d = await api('/api/password-resets/reset', { method: 'POST', body: JSON.stringify({ id }) }); alert('Password reset to micro1234 for ' + d.email + ' — please inform the member on Gmail.'); loadPwResets(); } catch (e) { alert(e.message); } };
+window.dismissPw = async id => { try { await api('/api/password-resets/dismiss', { method: 'POST', body: JSON.stringify({ id }) }); loadPwResets(); } catch (e) { alert(e.message); } };
+
 on('signOut', 'onclick', () => {
   token = ''; me = null; myTimeBalance = 0;
   localStorage.removeItem('microedu_token'); localStorage.removeItem('d2d_token');
   hideEl('profileBox'); hideEl('teacherCard'); hideEl('adminCard'); hideEl('dashMain');
+  /* Nothing private stays on screen after sign-out: profile, requests,
+     wallet, time bank and admin lists are all emptied, not just hidden. */
+  ['profileContent', 'myRequests', 'teacherReqs', 'wEntries', 'tbEntries', 'extList', 'pwResetList'].forEach(id => { const el = $(id); if (el) el.innerHTML = ''; });
+  const wb = $('wBalance'); if (wb) wb.textContent = 'BDT 0';
+  const tb = $('tbBalance'); if (tb) tb.textContent = '0 min';
   const sf = $('signForm'); if (sf) sf.classList.remove('hidden');
   msg($('signMsg'), 'Signed out');
 });
@@ -236,18 +261,34 @@ function showProfile(p, cv) {
   prefillDetailsForm(p);
   hideEl('teacherCard', false);
   fillPlans();
-  if (p.id === 1) { hideEl('adminCard', false); loadExtensions(); }
+  if (p.id === 1) { hideEl('adminCard', false); loadExtensions(); loadPwResets(); }
   const isTeacher = !!(cv && Number(cv.teacher_ready || 0));
   const appear = p.photo_mode === 'anonymous' ? '🕶️ Anonymous (public lists hide your name & photo)'
     : p.photo_mode === 'group' ? '👥 Group' + (p.group_name ? ': ' + esc(p.group_name) : '')
     : '📷 Personal photo';
-  $('profileContent').innerHTML = `<div class="t-head">${avatarHtml(p, true)}<div><h3>${esc(p.name)}</h3><small>${isTeacher ? '👩‍🏫 Teacher · ' : 'Member · '}${esc(p.email)}${p.phone ? ' · ' + esc(p.phone) : ''}</small><br><small>Appearing as: ${appear}</small></div></div>` +
-    (isTeacher ? `<p class="t-meta" style="margin-top:12px">${esc(cv.education)}, ${esc(cv.university)} · ${esc(cv.profession)}${cv.position ? ' (' + esc(cv.position) + ')' : ''}<br>
-    Experience: ${esc(cv.experience)} · Speciality: ${esc(cv.speciality)}<br>
-    Subjects: ${esc(cv.subjects)} · Level: ${esc(cv.level)}<br>
-    Price: <b>${esc(priceText(cv))}</b>${Number(cv.accepts_time_exchange || 0) ? ' · ⏳ Accepts time exchange' : ''}<br>
-    Address: ${esc(cv.address)} · Available: ${esc(cv.available_time || '-')}${cv.expertise_time ? '<br>Expertise-wise time: ' + esc(cv.expertise_time) : ''} · CV file: ${esc(cv.cv_file_name || '-')}</p>`
-    : '<p class="muted" style="margin-top:12px">You can learn from any teacher with this account.</p><p><button class="btn btn-primary btn-sm" type="button" onclick="goTeach()">👩‍🏫 Become a teacher — complete my profile</button></p>');
+  const contact = [`<span>✉️ ${esc(p.email)}</span>`, p.phone ? `<span>📞 ${esc(p.phone)}</span>` : ''].filter(Boolean).join('');
+  const detail = (label, value) => value ? `<div class="profile-detail"><span>${label}</span><strong>${value}</strong></div>` : '';
+  const teacherDetails = isTeacher ? '<div class="profile-details">' +
+    detail('Education', `${esc(cv.education)}${cv.university ? ' · ' + esc(cv.university) : ''}`) +
+    detail('Profession', `${esc(cv.profession)}${cv.position ? ' · ' + esc(cv.position) : ''}`) +
+    detail('Experience', esc(cv.experience)) +
+    detail('Speciality', esc(cv.speciality)) +
+    detail('Subjects', esc(cv.subjects)) +
+    detail('Level', esc(cv.level)) +
+    detail('Price', esc(priceText(cv)) + (Number(cv.accepts_time_exchange || 0) ? ' · Accepts time exchange' : '')) +
+    detail('Address', esc(cv.address)) +
+    detail('Available', esc(cv.available_time || '-')) +
+    detail('Expertise-wise time', esc(cv.expertise_time || '')) +
+    detail('CV file', esc(cv.cv_file_name || '')) +
+    '</div>' : '';
+  $('profileContent').innerHTML =
+    `<div class="profile-summary">${avatarHtml(p, true)}<div class="profile-main">` +
+      `<div class="profile-name-row"><h3>${esc(p.name)}</h3><span class="profile-badge">${isTeacher ? '👩‍🏫 Teacher' : 'Member'}</span></div>` +
+      `<div class="profile-contact">${contact}</div>` +
+      `<div class="profile-appear"><span>Profile display</span><b>${appear}</b></div>` +
+    `</div></div>` +
+    (isTeacher ? teacherDetails
+      : `<div class="profile-next"><img src="/images/teacher.webp" alt=""><div class="profile-next-text"><b>Learn anything — or become a teacher</b><p>You can learn from any teacher with this account. To teach, complete your full profile; it takes only a few minutes.</p></div><button class="btn btn-primary" type="button" onclick="goTeach()">👩‍🏫 Become a teacher</button></div>`);
   prefillTeacherForm(cv);
   loadTimebank();
 }
@@ -519,6 +560,11 @@ const BN = {
   lblPricing: 'আপনি কীভাবে চার্জ করবেন?', priceHourly: 'ঘণ্টার রেট', priceBidding: 'বিডিং (ছাত্ররা দাম প্রস্তাব করবে)', priceFree: 'ফ্রি সার্ভিস',
   lblClassTime: 'ক্লাসের তারিখ ও সময়', joinNote: 'ক্লাসের লিংক লুকানো থাকে — আপনি ও আপনার শিক্ষক শুধু এই সময়ে Join Class বোতাম দিয়ে ঢুকতে পারবেন।',
   adminTitle: '🛡️ microedu অ্যাডমিন — সময় বাড়ানোর অনুরোধ',
+  lblEmailOrId: 'ইমেইল অথবা মেম্বার আইডি', phEmailOrId: 'you@example.com অথবা 5',
+  forgotLink: 'পাসওয়ার্ড ভুলে গেছেন?', forgotTitle: '🔑 পাসওয়ার্ড ভুলে গেছেন?',
+  forgotNote: 'আপনার রেজিস্টার করা ইমেইল লিখুন। microedu আপনার পাসওয়ার্ড সাধারণ স্টার্টার পাসওয়ার্ডে রিসেট করে Gmail-এ জানিয়ে দেবে। তারপর সেটা দিয়ে সাইন ইন করে প্রোফাইল থেকে পাসওয়ার্ড বদলে নিন।',
+  forgotBtn: 'microedu-কে আমার পাসওয়ার্ড রিসেট করতে বলুন',
+  adminPwTitle: '🔑 পাসওয়ার্ড রিসেটের অনুরোধ',
   lblRate: 'রেট (টাকা / ঘণ্টা)',
   lblExpTime: 'বিষয়ভিত্তিক সময়', phExpTime: 'পরিসংখ্যান: শনি–বৃহস্পতি সন্ধ্যা ৬–৮টা · Excel: শুক্রবার সকাল ১০টা–১২টা',
   lblCvFile: 'সিভি ফাইল (ফাইলের নাম সংরক্ষিত হয়)', regSubmit: 'রেজিস্টার করুন — সম্পূর্ণ ফ্রি',
@@ -527,7 +573,7 @@ const BN = {
   lblFullNamePlain: 'পুরো নাম', lblAppear: 'আপনি কীভাবে দেখাবেন',
   lblCurPass: 'বর্তমান পাসওয়ার্ড', lblNewPass: 'নতুন পাসওয়ার্ড', lblNewPass2: 'নতুন পাসওয়ার্ড আবার',
   saveDetailsBtn: 'আমার তথ্য সেভ করুন', changePassBtn: 'পাসওয়ার্ড বদলান',
-  phYourPass: 'আপনার পাসওয়ার্ড', signOutBtn: 'সাইন আউট', myProfile: 'আমার প্রোফাইল (আমার সিভি থেকে)',
+  phYourPass: 'আপনার পাসওয়ার্ড', signOutBtn: 'সাইন আউট', myProfile: 'আমার প্রোফাইল',
   walletTitle: 'আমার ওয়ালেট', forTeachers: '(শিক্ষকদের জন্য)', lblBalance: 'ব্যালেন্স:',
   lblWithdrawAmt: 'উত্তোলনের পরিমাণ (টাকা)', withdrawBtn: 'উত্তোলন করুন',
   reqToMeTitle: 'আমার কাছে আসা রিকোয়েস্ট', feedbackTitle: '⭐ মূল্যায়ন / ফিডব্যাক',

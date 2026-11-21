@@ -132,6 +132,14 @@ CREATE TABLE IF NOT EXISTS time_entries (
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_time_person ON time_entries(person_id);
+CREATE TABLE IF NOT EXISTS password_resets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  person_id INTEGER NOT NULL REFERENCES registered_people(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  done INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_pwreset_person ON password_resets(person_id);
 `;
 
 /* Databases (env.DB objects) already known to hold the schema. A WeakSet so
@@ -171,6 +179,7 @@ const MIGRATIONS = [
   /* Members who registered with a full CV before the two-step model are
      already teachers — mark them ready (idempotent). */
   "UPDATE cv_details SET teacher_ready=1 WHERE teacher_ready=0 AND subjects IS NOT NULL AND subjects<>''",
+  `CREATE TABLE IF NOT EXISTS password_resets (id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, email TEXT NOT NULL, done INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')))`,
 ];
 
 async function runMigrations(db) {
@@ -386,12 +395,60 @@ const routes = {
 
   'POST /api/signin': async (request, db) => {
     const b = await body(request);
-    const p = await db.prepare('SELECT * FROM registered_people WHERE email=?').bind(b.email || '').first();
+    /* Sign in with the email address OR the numeric member ID. */
+    const ident = String(b.email || '').trim();
+    const p = /^\d+$/.test(ident)
+      ? await db.prepare('SELECT * FROM registered_people WHERE id=?').bind(Number(ident)).first()
+      : await db.prepare('SELECT * FROM registered_people WHERE LOWER(email)=LOWER(?)').bind(ident).first();
     if (!p || !(await verifyPw(b.password || '', p.password_hash)))
       return send({ found: false, error: 'Invalid email or password' }, 401);
     const token = randomHex(24);
     await db.prepare('INSERT INTO sessions(token,person_id) VALUES(?,?)').bind(token, p.id).run();
     return send({ found: true, person: pub(p), cv: await cvOf(db, p.id), token }, 200);
+  },
+
+  /* Forgot password: the member asks from the sign-in page; the request
+     lands in the site owner's admin card, microedu resets the account to
+     the common starter password (micro1234) and tells the member on
+     Gmail. The member then signs in and changes it. The response is the
+     same whether or not the email exists, so accounts cannot be probed. */
+  'POST /api/password/forgot': async (request, db) => {
+    const b = await body(request);
+    const email = String(b.email || '').trim();
+    if (email) {
+      const p = await db.prepare('SELECT * FROM registered_people WHERE LOWER(email)=LOWER(?)').bind(email).first();
+      if (p) {
+        const open = await db.prepare('SELECT 1 AS x FROM password_resets WHERE person_id=? AND done=0').bind(p.id).first();
+        if (!open) await db.prepare('INSERT INTO password_resets(person_id,email) VALUES(?,?)').bind(p.id, p.email).run();
+      }
+    }
+    return send({ ok: true }, 200);
+  },
+
+  'GET /api/password-resets': async (request, db) => {
+    const me = await auth(request, db); if (!me) return send({ error: 'Sign in required' }, 401);
+    if (me.id !== 1) return send({ error: 'microedu admin only' }, 403);
+    const rows = (await db.prepare('SELECT r.id, r.person_id, r.email, r.created_at, p.name FROM password_resets r JOIN registered_people p ON p.id=r.person_id WHERE r.done=0 ORDER BY r.id').all()).results;
+    return send({ resets: rows }, 200);
+  },
+
+  'POST /api/password-resets/reset': async (request, db) => {
+    const me = await auth(request, db); if (!me) return send({ error: 'Sign in required' }, 401);
+    if (me.id !== 1) return send({ error: 'microedu admin only' }, 403);
+    const b = await body(request);
+    const r = await db.prepare('SELECT * FROM password_resets WHERE id=? AND done=0').bind(Number(b.id) || 0).first();
+    if (!r) return send({ error: 'Request not found' }, 404);
+    await db.prepare('UPDATE registered_people SET password_hash=? WHERE id=?').bind(await hashPw('micro1234'), r.person_id).run();
+    await db.prepare('UPDATE password_resets SET done=1 WHERE id=?').bind(r.id).run();
+    return send({ ok: true, email: r.email }, 200);
+  },
+
+  'POST /api/password-resets/dismiss': async (request, db) => {
+    const me = await auth(request, db); if (!me) return send({ error: 'Sign in required' }, 401);
+    if (me.id !== 1) return send({ error: 'microedu admin only' }, 403);
+    const b = await body(request);
+    await db.prepare('UPDATE password_resets SET done=1 WHERE id=?').bind(Number(b.id) || 0).run();
+    return send({ ok: true }, 200);
   },
 
   'GET /api/me': async (request, db) => {

@@ -44,15 +44,28 @@
     <div class="wrap">
       <div class="card narrow">
         <form id="signForm">
-          <div class="row"><div><label data-i18n="lblEmail">Email</label><input id="sEmail" type="email" required data-i18n-ph="phEmail" placeholder="you@example.com"></div>
+          <div class="row"><div><label data-i18n="lblEmailOrId">Email or Member ID</label><input id="sEmail" type="text" required data-i18n-ph="phEmailOrId" placeholder="you@example.com or 5"></div>
           <div><label data-i18n="lblPassword">Password</label><input id="sPass" type="password" required data-i18n-ph="phYourPass" placeholder="Your password"></div></div>
-          <p><button class="btn btn-primary" type="submit" data-i18n="signInBtn">Sign In</button></p>
+          <p><button class="btn btn-primary" type="submit" data-i18n="signInBtn">Sign In</button>
+          <button class="btn btn-ghost btn-sm" type="button" id="forgotToggle" data-i18n="forgotLink">Forgot password?</button></p>
           <div class="msg" id="signMsg"></div>
         </form>
+        <form id="forgotForm" class="hidden">
+          <h3 class="cv-title" data-i18n="forgotTitle">🔑 Forgot your password?</h3>
+          <p class="muted" data-i18n="forgotNote">Write your registered email. microedu will reset your password to the common starter password and inform you on Gmail. Then sign in with it and change your password from your profile.</p>
+          <div class="row"><div><label data-i18n="lblEmail">Email</label><input id="fpEmail" type="email" data-i18n-ph="phEmail" placeholder="you@example.com"></div></div>
+          <p><button class="btn btn-primary btn-sm" type="submit" data-i18n="forgotBtn">Ask microedu to reset my password</button></p>
+          <div class="msg" id="forgotMsg"></div>
+        </form>
         <div id="profileBox" class="hidden">
-          <h3 data-i18n="myProfile">My profile</h3>
+          <div class="profile-top">
+            <div>
+              <span class="profile-eyebrow">Account</span>
+              <h3 data-i18n="myProfile">My profile</h3>
+            </div>
+            <button class="btn btn-ghost btn-sm" type="button" id="signOut" data-i18n="signOutBtn">Sign Out</button>
+          </div>
           <div id="profileContent"></div>
-          <p><button class="btn btn-ghost btn-sm" type="button" id="signOut" data-i18n="signOutBtn">Sign Out</button></p>
           <h3 class="cv-title" data-i18n="editDetailsTitle">✏️ Edit my details</h3>
           <form id="detailsForm">
             <div class="row"><div><label data-i18n="lblFullNamePlain">Full name</label><input id="dName"></div>
@@ -103,6 +116,8 @@
       <div class="card narrow hidden" id="adminCard">
         <h3 data-i18n="adminTitle">🛡️ microedu admin — extension requests</h3>
         <div id="extList"></div>
+        <h3 class="cv-title" data-i18n="adminPwTitle">🔑 Password reset requests</h3>
+        <div id="pwResetList"></div>
       </div>
 
       <div class="grid two">
@@ -133,17 +148,14 @@
           <div class="msg" id="fMsg"></div>
         </div>
       </div>
-    </div>
-  </section>
-<section class="section" style="padding-top:0">
-    <div class="wrap">
-      <div class="card">
+
+      <div class="card my-requests-card">
         <h3 data-i18n="myReqTitle">My requests</h3>
         <div id="myRequests"></div>
       </div>
+      </div>
     </div>
   </section>
-      </div>
 
 </main>
 

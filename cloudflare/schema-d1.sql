@@ -127,3 +127,10 @@ CREATE TABLE IF NOT EXISTS time_entries (
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_time_person ON time_entries(person_id);
+CREATE TABLE IF NOT EXISTS password_resets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  person_id INTEGER NOT NULL,
+  email TEXT NOT NULL,
+  done INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+);
