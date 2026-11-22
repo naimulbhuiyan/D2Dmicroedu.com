@@ -23,7 +23,6 @@
     </a>
     <nav class="nav">
       <a href="help" data-i18n="navHelp">I Need Help</a>
-      <a href="teachers" data-i18n="navFind">Our Teachers</a>
       <a href="plans" data-i18n="navSub">Subscription</a>
     </nav>
     <div class="top-actions">
@@ -89,6 +88,10 @@
       </div>
 
       <div id="dashMain" class="hidden">
+      <div class="card hidden" id="notifCard">
+        <h3 data-i18n="notifTitle">🔔 Notifications</h3>
+        <div id="notifList"></div>
+      </div>
       <div class="card narrow hidden" id="teacherCard">
         <h3 data-i18n="teacherCardTitle">👩‍🏫 Become a teacher — complete your profile</h3>
         <p class="muted" data-i18n="teacherCardNote">Every field is required — teachers carry responsibility for their students. Once saved, you appear in the teacher list with your own rate. There is no price ceiling: charge hourly, by bidding, or teach completely free.</p>
@@ -118,6 +121,8 @@
         <div id="extList"></div>
         <h3 class="cv-title" data-i18n="adminPwTitle">🔑 Password reset requests</h3>
         <div id="pwResetList"></div>
+        <h3 class="cv-title" data-i18n="adminPayTitle">💳 bKash payments to verify</h3>
+        <div id="verifyList"></div>
       </div>
 
       <div class="grid two">
@@ -168,7 +173,6 @@
     <div class="foot-col">
       <h4 data-i18n="footExplore">Explore</h4>
       <a href="/#how" data-i18n="navHow">How it works</a>
-      <a href="teachers" data-i18n="navFind">Our Teachers</a>
       <a href="plans" data-i18n="navSub">Subscription</a>
       <a href="register" data-i18n="regLink">Registration</a>
       <a href="teachers#people" data-i18n="navPeople">Registered People</a>

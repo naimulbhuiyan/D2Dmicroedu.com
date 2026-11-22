@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS subscriptions(id INTEGER PRIMARY KEY AUTOINCREMENT, p
 CREATE TABLE IF NOT EXISTS tuition_requests(id INTEGER PRIMARY KEY AUTOINCREMENT, gid TEXT NOT NULL UNIQUE, student_id INTEGER NOT NULL REFERENCES registered_people(id), teacher_id INTEGER NOT NULL REFERENCES registered_people(id), level TEXT, subject TEXT NOT NULL, chapter TEXT, topic TEXT NOT NULL, hours REAL NOT NULL DEFAULT 1, rate_bdt_per_hour REAL NOT NULL DEFAULT 500, amount_bdt REAL NOT NULL, available_time TEXT, pay_with TEXT DEFAULT 'money', teacher_response TEXT DEFAULT 'Waiting', status TEXT NOT NULL DEFAULT 'Pending', class_link TEXT, class_start TEXT, extension_minutes INTEGER DEFAULT 0, extension_status TEXT DEFAULT 'None', created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS time_entries(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, gid TEXT, topic TEXT, minutes INTEGER NOT NULL, kind TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS password_resets(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, email TEXT NOT NULL, done INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')));
-CREATE TABLE IF NOT EXISTS payments(id INTEGER PRIMARY KEY AUTOINCREMENT, gid TEXT NOT NULL, person_id INTEGER NOT NULL, amount_bdt REAL NOT NULL, method TEXT DEFAULT 'bKash', status TEXT NOT NULL DEFAULT 'Pending', escrow_status TEXT DEFAULT 'Awaiting payment', created_at TEXT DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS payments(id INTEGER PRIMARY KEY AUTOINCREMENT, gid TEXT NOT NULL, person_id INTEGER NOT NULL, amount_bdt REAL NOT NULL, method TEXT DEFAULT 'bKash', status TEXT NOT NULL DEFAULT 'Pending', escrow_status TEXT DEFAULT 'Awaiting payment', trxid TEXT, sender TEXT, verified INTEGER DEFAULT 0, rejected INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS wallet_entries(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, gid TEXT, topic TEXT, amount_bdt REAL NOT NULL, kind TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS feedback_evaluation(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, gid TEXT, comment TEXT, ranking INTEGER, complain TEXT, created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS chat_messages(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER, gid TEXT, sender TEXT, message TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')));
@@ -37,6 +37,10 @@ for (const sql of [
   'ALTER TABLE tuition_requests ADD COLUMN extension_minutes INTEGER DEFAULT 0',
   "ALTER TABLE tuition_requests ADD COLUMN extension_status TEXT DEFAULT 'None'",
   "ALTER TABLE payments ADD COLUMN escrow_status TEXT DEFAULT 'Awaiting payment'",
+  'ALTER TABLE payments ADD COLUMN trxid TEXT',
+  'ALTER TABLE payments ADD COLUMN sender TEXT',
+  'ALTER TABLE payments ADD COLUMN verified INTEGER DEFAULT 0',
+  'ALTER TABLE payments ADD COLUMN rejected INTEGER DEFAULT 0',
   'ALTER TABLE cv_details ADD COLUMN teacher_ready INTEGER DEFAULT 0',
   'ALTER TABLE cv_details ADD COLUMN accepts_time_exchange INTEGER DEFAULT 0',
   "ALTER TABLE tuition_requests ADD COLUMN pay_with TEXT DEFAULT 'money'",
@@ -259,6 +263,40 @@ const routes = {
     db.prepare('INSERT INTO payments(gid,person_id,amount_bdt,status) VALUES(?,?,?,\'Pending\')').run(g,me.id,amount);
     send(res,201,{request: stripLink(db.prepare('SELECT * FROM tuition_requests WHERE id=?').get(Number(info.lastInsertRowid)))});
   },
+  /* bKash advance payment: student submits the TrxID; microedu (admin)
+     verifies it, which is what sets Confirm + Held. */
+  'POST /api/payments/submit': async (req,res) => {
+    const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
+    const b = await body(req);
+    const r = db.prepare('SELECT * FROM tuition_requests WHERE gid=?').get(b.gid||'');
+    if (!r || r.student_id!==me.id) return send(res,404,{error:'Request not found'});
+    if (r.teacher_response!=='Accepted' || r.status!=='Pending') return send(res,400,{error:'The teacher must accept first'});
+    if (r.pay_with==='time' || Number(r.amount_bdt)<=0) return send(res,400,{error:'This class needs no bKash payment'});
+    const trxid = String(b.trxid||'').trim().toUpperCase();
+    if (trxid.length<6) return send(res,400,{error:'Please enter the bKash transaction ID (TrxID)'});
+    db.prepare('UPDATE payments SET trxid=?, sender=?, rejected=0 WHERE gid=?').run(trxid, String(b.sender||'').trim()||null, r.gid);
+    send(res,200,{ok:true});
+  },
+  'GET /api/payments/to-verify': (req,res) => {
+    const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
+    if (me.id!==1) return send(res,403,{error:'microedu admin only'});
+    const rows = db.prepare("SELECT p.gid, p.amount_bdt, p.trxid, p.sender, t.subject, t.topic, s.name AS student_name, te.name AS teacher_name FROM payments p JOIN tuition_requests t ON t.gid=p.gid JOIN registered_people s ON s.id=t.student_id JOIN registered_people te ON te.id=t.teacher_id WHERE p.trxid IS NOT NULL AND p.verified=0 AND p.rejected=0 ORDER BY p.id DESC").all();
+    send(res,200,{payments: rows});
+  },
+  'POST /api/payments/verify': async (req,res) => {
+    const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
+    if (me.id!==1) return send(res,403,{error:'microedu admin only'});
+    const b = await body(req);
+    const r = db.prepare('SELECT * FROM tuition_requests WHERE gid=?').get(b.gid||'');
+    if (!r) return send(res,404,{error:'Request not found'});
+    if (b.ok) {
+      db.prepare("UPDATE payments SET verified=1, status='Confirm', escrow_status='Held' WHERE gid=?").run(r.gid);
+      db.prepare("UPDATE tuition_requests SET status='Confirm' WHERE gid=? AND status='Pending'").run(r.gid);
+    } else {
+      db.prepare('UPDATE payments SET rejected=1, trxid=NULL, sender=NULL WHERE gid=?').run(r.gid);
+    }
+    send(res,200,{ok:true});
+  },
   'POST /api/payments/confirm': async (req,res) => {
     const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
     const b = await body(req);
@@ -268,6 +306,8 @@ const routes = {
     if (!['Confirm','Ongoing','Done'].includes(next)) return send(res,400,{error:'status must be Confirm, Ongoing or Done'});
     /* The cycle: teacher accepts first, then the student confirms payment. */
     if (next==='Confirm' && r.teacher_response!=='Accepted') return send(res,400,{error:'The teacher has not accepted this request yet'});
+    /* Money classes confirm only through bKash TrxID verification. */
+    if (next==='Confirm' && r.pay_with!=='time' && Number(r.amount_bdt)>0) return send(res,400,{error:'Pay by bKash first — microedu will verify your payment and confirm the class.'});
     db.prepare('UPDATE tuition_requests SET status=? WHERE gid=?').run(next,r.gid);
     if (next==='Confirm') db.prepare("UPDATE payments SET status='Confirm', escrow_status='Held' WHERE gid=?").run(r.gid);
     if (next==='Done') {
@@ -405,7 +445,7 @@ const routes = {
   },
   'GET /api/my-requests': (req,res) => {
     const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
-    const enrich = rows => rows.map(r => { const pay = db.prepare('SELECT escrow_status FROM payments WHERE gid=? ORDER BY id DESC LIMIT 1').get(r.gid); return {...stripLink(r), escrow_status: pay ? pay.escrow_status : 'Awaiting payment'}; });
+    const enrich = rows => rows.map(r => { const pay = db.prepare('SELECT escrow_status, status, trxid, sender, verified, rejected FROM payments WHERE gid=? ORDER BY id DESC LIMIT 1').get(r.gid); const sn = db.prepare('SELECT name FROM registered_people WHERE id=?').get(r.student_id); const tn = db.prepare('SELECT name FROM registered_people WHERE id=?').get(r.teacher_id); return {...stripLink(r), escrow_status: pay ? pay.escrow_status : 'Awaiting payment', pay_status: pay ? pay.status : null, trxid: pay ? pay.trxid : null, sender: pay ? pay.sender : null, verified: pay ? pay.verified : 0, rejected: pay ? pay.rejected : 0, student_name: sn ? sn.name : null, teacher_name: tn ? tn.name : null}; });
     send(res,200,{asStudent: enrich(db.prepare('SELECT * FROM tuition_requests WHERE student_id=? ORDER BY id DESC').all(me.id)), asTeacher: enrich(db.prepare('SELECT * FROM tuition_requests WHERE teacher_id=? ORDER BY id DESC').all(me.id))});
   },
 };

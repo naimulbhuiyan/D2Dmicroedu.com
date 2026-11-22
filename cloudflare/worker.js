@@ -94,6 +94,7 @@ CREATE TABLE IF NOT EXISTS payments (
   method TEXT DEFAULT 'bKash',
   status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending','Confirm')),
   escrow_status TEXT DEFAULT 'Awaiting payment',
+  trxid TEXT, sender TEXT, verified INTEGER DEFAULT 0, rejected INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_pay_gid ON payments(gid);
@@ -182,6 +183,10 @@ const MIGRATIONS = [
   "UPDATE cv_details SET teacher_ready=1 WHERE teacher_ready=0 AND subjects IS NOT NULL AND subjects<>''",
   `CREATE TABLE IF NOT EXISTS password_resets (id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, email TEXT NOT NULL, done INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')))`,
   "ALTER TABLE tuition_requests ADD COLUMN teacher_response TEXT DEFAULT 'Waiting'",
+  'ALTER TABLE payments ADD COLUMN trxid TEXT',
+  'ALTER TABLE payments ADD COLUMN sender TEXT',
+  'ALTER TABLE payments ADD COLUMN verified INTEGER DEFAULT 0',
+  'ALTER TABLE payments ADD COLUMN rejected INTEGER DEFAULT 0',
   /* Classes already past the payment step were accepted under the old
      flow — mark them accepted so they are never stuck (idempotent). */
   "UPDATE tuition_requests SET teacher_response='Accepted' WHERE status IN ('Confirm','Ongoing','Done') AND (teacher_response IS NULL OR teacher_response='Waiting')",
@@ -572,6 +577,44 @@ const routes = {
     return send({ request: stripLink(requestRow) }, 201);
   },
 
+  /* bKash advance payment: the student sends the money to microedu's
+     bKash number and submits the TrxID here; microedu (admin) verifies it
+     in /api/payments/verify, which is what sets Confirm + Held. */
+  'POST /api/payments/submit': async (request, db) => {
+    const me = await auth(request, db); if (!me) return send({ error: 'Sign in required' }, 401);
+    const b = await body(request);
+    const r = await db.prepare('SELECT * FROM tuition_requests WHERE gid=?').bind(b.gid || '').first();
+    if (!r || r.student_id !== me.id) return send({ error: 'Request not found' }, 404);
+    if (r.teacher_response !== 'Accepted' || r.status !== 'Pending') return send({ error: 'The teacher must accept first' }, 400);
+    if (r.pay_with === 'time' || Number(r.amount_bdt) <= 0) return send({ error: 'This class needs no bKash payment' }, 400);
+    const trxid = String(b.trxid || '').trim().toUpperCase();
+    if (trxid.length < 6) return send({ error: 'Please enter the bKash transaction ID (TrxID)' }, 400);
+    await db.prepare('UPDATE payments SET trxid=?, sender=?, rejected=0 WHERE gid=?').bind(trxid, String(b.sender || '').trim() || null, r.gid).run();
+    return send({ ok: true }, 200);
+  },
+
+  'GET /api/payments/to-verify': async (request, db) => {
+    const me = await auth(request, db); if (!me) return send({ error: 'Sign in required' }, 401);
+    if (me.id !== 1) return send({ error: 'microedu admin only' }, 403);
+    const rows = (await db.prepare("SELECT p.gid, p.amount_bdt, p.trxid, p.sender, t.subject, t.topic, s.name AS student_name, te.name AS teacher_name FROM payments p JOIN tuition_requests t ON t.gid=p.gid JOIN registered_people s ON s.id=t.student_id JOIN registered_people te ON te.id=t.teacher_id WHERE p.trxid IS NOT NULL AND p.verified=0 AND p.rejected=0 ORDER BY p.id DESC").all()).results;
+    return send({ payments: rows }, 200);
+  },
+
+  'POST /api/payments/verify': async (request, db) => {
+    const me = await auth(request, db); if (!me) return send({ error: 'Sign in required' }, 401);
+    if (me.id !== 1) return send({ error: 'microedu admin only' }, 403);
+    const b = await body(request);
+    const r = await db.prepare('SELECT * FROM tuition_requests WHERE gid=?').bind(b.gid || '').first();
+    if (!r) return send({ error: 'Request not found' }, 404);
+    if (b.ok) {
+      await db.prepare("UPDATE payments SET verified=1, status='Confirm', escrow_status='Held' WHERE gid=?").bind(r.gid).run();
+      await db.prepare("UPDATE tuition_requests SET status='Confirm' WHERE gid=? AND status='Pending'").bind(r.gid).run();
+    } else {
+      await db.prepare('UPDATE payments SET rejected=1, trxid=NULL, sender=NULL WHERE gid=?').bind(r.gid).run();
+    }
+    return send({ ok: true }, 200);
+  },
+
   'POST /api/payments/confirm': async (request, db) => {
     const me = await auth(request, db); if (!me) return send({ error: 'Sign in required' }, 401);
     const b = await body(request);
@@ -581,6 +624,10 @@ const routes = {
     if (!['Confirm', 'Ongoing', 'Done'].includes(next)) return send({ error: 'status must be Confirm, Ongoing or Done' }, 400);
     /* The cycle: teacher accepts first, then the student confirms payment. */
     if (next === 'Confirm' && r.teacher_response !== 'Accepted') return send({ error: 'The teacher has not accepted this request yet' }, 400);
+    /* Money classes are paid in advance by bKash and confirmed only when
+       microedu verifies the TrxID — a direct Confirm would skip the real
+       payment. Free classes and time-bank classes still confirm here. */
+    if (next === 'Confirm' && r.pay_with !== 'time' && Number(r.amount_bdt) > 0) return send({ error: 'Pay by bKash first — microedu will verify your payment and confirm the class.' }, 400);
     await db.prepare('UPDATE tuition_requests SET status=? WHERE gid=?').bind(next, r.gid).run();
     if (next === 'Confirm') await db.prepare("UPDATE payments SET status='Confirm', escrow_status='Held' WHERE gid=?").bind(r.gid).run();
     if (next === 'Done') {
@@ -752,8 +799,10 @@ const routes = {
     const enrich = async rows => {
       const out = [];
       for (const r of rows) {
-        const pay = await db.prepare('SELECT escrow_status FROM payments WHERE gid=? ORDER BY id DESC LIMIT 1').bind(r.gid).first();
-        out.push({ ...stripLink(r), escrow_status: pay ? pay.escrow_status : 'Awaiting payment' });
+        const pay = await db.prepare('SELECT escrow_status, status, trxid, sender, verified, rejected FROM payments WHERE gid=? ORDER BY id DESC LIMIT 1').bind(r.gid).first();
+        const sn = await db.prepare('SELECT name FROM registered_people WHERE id=?').bind(r.student_id).first();
+        const tn = await db.prepare('SELECT name FROM registered_people WHERE id=?').bind(r.teacher_id).first();
+        out.push({ ...stripLink(r), escrow_status: pay ? pay.escrow_status : 'Awaiting payment', pay_status: pay ? pay.status : null, trxid: pay ? pay.trxid : null, sender: pay ? pay.sender : null, verified: pay ? pay.verified : 0, rejected: pay ? pay.rejected : 0, student_name: sn ? sn.name : null, teacher_name: tn ? tn.name : null });
       }
       return out;
     };

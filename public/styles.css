@@ -138,6 +138,33 @@ input:focus,select:focus,textarea:focus{border-color:var(--teal);background:#fff
 .t-head h3{font-size:18px;line-height:1.2}
 .t-head small{color:var(--muted);font-weight:600}
 .t-meta{font-size:14.5px}
+
+/* profile summary (dashboard) */
+.profile-top{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding-bottom:16px;margin-bottom:18px;border-bottom:1px solid var(--border)}
+.profile-eyebrow{display:block;font-size:11.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--teal)}
+.profile-top h3{font-size:23px;margin-top:3px}
+.profile-summary{display:flex;gap:20px;align-items:center;background:linear-gradient(135deg,#eefaf8 0%,#fff8ec 100%);border:1px solid #d9ebe8;border-radius:18px;padding:22px}
+.profile-summary .avatar.big{width:96px;height:96px;border-radius:50%;border:4px solid #fff;box-shadow:0 10px 24px rgba(16,24,40,.16);font-size:30px}
+.profile-summary .avatar.big img{object-position:center 30%}
+.profile-main{flex:1;min-width:0}
+.profile-name-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.profile-name-row h3{font-size:27px;line-height:1.15;overflow-wrap:anywhere}
+.profile-badge{background:var(--teal);color:#fff;font-size:12.5px;font-weight:800;padding:4px 12px;border-radius:999px;white-space:nowrap}
+.profile-contact{display:flex;flex-direction:column;gap:2px;margin-top:7px;font-size:15px;font-weight:600;color:#52606d}
+.profile-contact span{overflow-wrap:anywhere}
+.profile-appear{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:11px}
+.profile-appear span{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.profile-appear b{background:#fff;border:1px solid var(--border);border-radius:999px;padding:4px 12px;font-size:13.5px;color:var(--ink)}
+.profile-details{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+.profile-detail{background:#fbfcfd;border:1px solid var(--border);border-radius:13px;padding:12px 15px}
+.profile-detail span{display:block;font-size:11px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:3px}
+.profile-detail strong{display:block;color:var(--ink);font-size:14.5px;line-height:1.5;overflow-wrap:anywhere}
+.profile-next{display:flex;align-items:center;gap:18px;margin-top:16px;background:var(--orange-soft);border:1px dashed #f5c396;border-radius:16px;padding:18px 20px}
+.profile-next img{width:86px;height:86px;object-fit:cover;border-radius:14px;flex:none;box-shadow:var(--shadow)}
+.profile-next-text{flex:1;min-width:0}
+.profile-next-text b{color:var(--ink);font-size:16.5px}
+.profile-next-text p{font-size:14.5px;margin-top:2px}
+.my-requests-card{margin-top:26px}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
 .chip{background:var(--grey-bg);border:1px solid var(--border);border-radius:999px;padding:3px 10px;font-size:12.5px;font-weight:700;color:var(--ink)}
 .chip.price-hourly{background:var(--teal-soft);color:var(--teal-dark);border-color:transparent}
@@ -254,4 +281,23 @@ html[lang="bn"] h1,html[lang="bn"] h2{letter-spacing:0;line-height:1.3}
   .top-actions{gap:6px;margin-left:0}
   .top-actions .btn{padding:7px 10px;font-size:13px}
   .announce{font-size:12px;padding:8px 10px}
+  .card{padding:20px}
+  .profile-summary{flex-direction:column;text-align:center;padding:20px 16px}
+  .profile-name-row{justify-content:center}
+  .profile-name-row h3{font-size:23px}
+  .profile-appear{justify-content:center}
+  .profile-details{grid-template-columns:1fr}
+  .profile-next{flex-direction:column;text-align:center}
 }
+
+/* Signed-in header chip + notification bell + notification items */
+.user-chip{display:inline-flex;align-items:center;gap:9px}
+.user-name{display:flex;flex-direction:column;line-height:1.15;text-decoration:none;font-weight:800;font-size:14px;color:#0f3d3e}
+.user-name small{font-weight:600;font-size:11px;color:#5b7a7a}
+.bell{position:relative;font-size:19px;text-decoration:none;line-height:1}
+.bell-badge{position:absolute;top:-7px;right:-9px;background:#e0245e;color:#fff;border-radius:999px;font-size:10px;font-weight:800;padding:1px 5px}
+.notif-item{border:1px solid #ffd98a;background:#fffaf0;border-radius:12px;padding:10px 12px;margin:8px 0}
+.notif-item p{margin:4px 0}
+.pay-box{border:1px solid #f5b8d0;background:#fdf2f7;border-radius:12px;padding:10px 12px;margin:8px 0}
+.pay-box p{margin:4px 0}
+.pay-box input{padding:8px 10px;border:1px solid var(--hatch-widget-border,#ccc);border-radius:8px}

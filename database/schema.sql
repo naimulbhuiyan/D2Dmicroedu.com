@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS payments (
   amount_bdt NUMERIC NOT NULL,
   method TEXT DEFAULT 'bKash',
   escrow_status TEXT DEFAULT 'Awaiting payment',
+  trxid TEXT, sender TEXT, verified INTEGER DEFAULT 0, rejected INTEGER DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending','Confirm')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

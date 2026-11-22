@@ -267,7 +267,7 @@ function showProfile(p, cv) {
   prefillDetailsForm(p);
   hideEl('teacherCard', false);
   fillPlans();
-  if (p.id === 1) { hideEl('adminCard', false); loadExtensions(); loadPwResets(); }
+  if (p.id === 1) { hideEl('adminCard', false); loadExtensions(); loadPwResets(); loadVerify(); }
   const isTeacher = !!(cv && Number(cv.teacher_ready || 0));
   const appear = p.photo_mode === 'anonymous' ? '🕶️ Anonymous (public lists hide your name & photo)'
     : p.photo_mode === 'group' ? '👥 Group' + (p.group_name ? ': ' + esc(p.group_name) : '')
@@ -328,16 +328,18 @@ function renderTeacherCard(t, suggested = false, requestable = true) {
     ${matchNote}
     <div class="chips">${subjects.map(s => `<span class="chip">${esc(s)}</span>`).join('')}${teacherPricing[t.id].acceptsTime ? '<span class="chip time-ex">⏳ Accepts time exchange</span>' : ''}</div>
     ${t.cv?.available_time || t.cv?.expertise_time ? `<p class="t-meta">🕒 ${esc(t.cv.expertise_time || t.cv.available_time)}</p>` : ''}
-    <div class="t-foot"><span class="muted">Rate shared after you request</span>${requestable ? `<button class="btn btn-primary btn-sm" onclick="requestTeacher(${t.id})">Request</button>` : '<span class="muted">Request via I Need Help above</span>'}</div>
+    <div class="t-foot">${priceChip(t.cv)}${requestable ? `<button class="btn btn-primary btn-sm" onclick="requestTeacher(${t.id})">Request</button>` : ''}</div>
   </div>`;
 }
 let suggestedIds = [];
 async function loadTeachers() {
+  /* No public teacher list anymore — teacher data is loaded only to power
+     the name search on the I Need Help page. Teachers become visible to a
+     learner as suggestions after the help form is filled. */
   try {
     const d = await api('/api/teachers');
     window.allTeachers = d.teachers;
-    setHtml('teacherList', d.teachers.length ? d.teachers.map(t => renderTeacherCard(t, false, false)).join('') : '<p class="muted">No teachers yet — register free and complete your teacher profile to be the first.</p>');
-  } catch (e) { /* list stays as-is */ }
+  } catch (e) { /* search stays empty */ }
 }
 on('suggestBtn', 'onclick', async () => {
   const btn = $('suggestBtn'); const old = btn.textContent;
@@ -360,9 +362,9 @@ function helpPayload(teacher_id) {
 async function sendRequests(ids) {
   if (!ids.length) return msg($('bulkMsg'), 'Tap "Suggest teachers for me" first.', false);
   if (!token) { msg($('bulkMsg'), 'Please register or sign in first — it takes one minute.', false); setTimeout(() => { location.href = 'register'; }, 900); return; }
-  let sent = 0;
-  for (const id of ids) { try { await api('/api/requests', { method: 'POST', body: JSON.stringify(helpPayload(id)) }); sent++; } catch (e) { /* skip a failed one */ } }
-  msg($('bulkMsg'), sent ? `✅ Request sent to ${sent} teacher(s). It is now in their dashboard — when a teacher accepts, you will see it in your dashboard and can confirm payment.` : 'Could not send — please sign in and try again.', !!sent);
+  let sent = 0; let firstErr = '';
+  for (const id of ids) { try { await api('/api/requests', { method: 'POST', body: JSON.stringify(helpPayload(id)) }); sent++; } catch (e) { if (!firstErr) firstErr = e.message; } }
+  msg($('bulkMsg'), sent ? `✅ Request sent to ${sent} teacher(s). It is now in their dashboard — when a teacher accepts, you will see it in your dashboard and can confirm payment.` + (firstErr ? ` (${ids.length - sent} could not be sent: ${firstErr})` : '') : 'Could not send: ' + (firstErr || 'please sign in and try again.'), !!sent);
   if (sent) loadMine();
 }
 window.sendToAll = () => sendRequests(suggestedIds);
@@ -395,6 +397,24 @@ window.requestTeacher = async id => {
     loadMine();
   } catch (e) { msg($('reqMsg'), e.message, false); }
 };
+/* When a request was sent (created_at is UTC in the database) and how
+   long is left until the class — both sides asked to see these. */
+function fmtWhen(s) {
+  if (!s) return '';
+  const d = new Date(String(s).includes('T') ? s : String(s).replace(' ', 'T') + 'Z');
+  return isNaN(d) ? String(s) : d.toLocaleString();
+}
+function timeUntil(s) {
+  if (!s) return '';
+  const d = new Date(s); if (isNaN(d)) return '';
+  let m = Math.round((d - Date.now()) / 60000);
+  const past = m < 0; m = Math.abs(m);
+  const parts = [];
+  const days = Math.floor(m / 1440); if (days) parts.push(days + 'd');
+  const hrs = Math.floor((m % 1440) / 60); if (hrs) parts.push(hrs + 'h');
+  parts.push((m % 60) + 'm');
+  return past ? parts.join(' ') + ' ago' : 'in ' + parts.join(' ');
+}
 function tracker(r) {
   const steps = ['Pending', 'Confirm', 'Ongoing', 'Done'];
   const cur = steps.indexOf(r.status);
@@ -432,22 +452,78 @@ async function loadMine() {
         btns.push(`<button class="btn btn-primary btn-sm" onclick="respondReq('${r.gid}','Accepted')">✅ Accept — I will teach this</button>`);
         btns.push(`<button class="btn btn-ghost btn-sm" onclick="respondReq('${r.gid}','Declined')">Decline</button>`);
       }
-      /* Payment can only be confirmed after the teacher has accepted. */
-      if (r.status === 'Pending' && resp === 'Accepted') btns.push(`<button class="btn btn-primary btn-sm" onclick="advance('${r.gid}','Confirm')">Confirm Payment</button>`);
+      /* Payment can only be confirmed after the teacher has accepted.
+         Money classes go through the bKash box below (TrxID + microedu
+         verification); free and time-bank classes confirm directly. */
+      const isMoney = r.pay_with !== 'time' && Number(r.amount_bdt) > 0;
+      if (r.status === 'Pending' && resp === 'Accepted' && !isMoney) btns.push(`<button class="btn btn-primary btn-sm" onclick="advance('${r.gid}','Confirm')">Confirm Payment</button>`);
+      let payBox = '';
+      if (mine === 'student' && r.status === 'Pending' && resp === 'Accepted' && isMoney) {
+        if (r.trxid && !r.rejected) {
+          payBox = `<div class="pay-box"><p>🧾 <b>bKash payment submitted</b> — TrxID: <b>${esc(r.trxid)}</b>${r.sender ? ' · From: ' + esc(r.sender) : ''}<br><span class="muted">microedu is verifying your payment. Once verified, the money is Held safely and your class is confirmed.</span></p></div>`;
+        } else {
+          payBox = `<div class="pay-box"><p>💳 <b>Pay BDT ${r.amount_bdt} by bKash</b> to <b>01729-071571</b> (microedu), then enter your transaction ID:</p>${r.rejected ? '<p><span class="escrow refunded">❌ microedu could not verify the last TrxID — please check it and submit again.</span></p>' : ''}<p style="display:flex;gap:8px;flex-wrap:wrap"><input id="trx-${r.gid}" placeholder="bKash TrxID" style="flex:1;min-width:150px"><input id="snd-${r.gid}" placeholder="Your bKash number" style="flex:1;min-width:140px"><button class="btn btn-primary btn-sm" onclick="submitTrx('${r.gid}')">Submit TrxID</button></p></div>`;
+        }
+      }
       if (r.status === 'Confirm') btns.push(`<button class="btn btn-primary btn-sm" onclick="advance('${r.gid}','Ongoing')">Start (Ongoing)</button>`);
       if (r.status === 'Ongoing') btns.push(`<button class="btn btn-primary btn-sm" onclick="advance('${r.gid}','Done')">Mark Done</button>`);
       if (['Confirm', 'Ongoing'].includes(r.status)) btns.push(`<button class="btn btn-orange btn-sm" onclick="joinClass('${r.gid}')">Join Class</button>`);
       if (['Confirm', 'Ongoing'].includes(r.status) && r.extension_status !== 'Requested') btns.push(`<button class="btn btn-ghost btn-sm" onclick="extendReq('${r.gid}')">Request +30 min</button>`);
       if (mine === 'student' && r.escrow_status === 'Held' && r.status !== 'Done') btns.push(`<button class="btn btn-ghost btn-sm" onclick="refundReq('${r.gid}')">Problem? Refund to me</button>`);
-      const when = r.class_start ? `<br>🗓️ ${esc(new Date(r.class_start).toLocaleString())} · ${r.hours} hr` : (r.available_time ? `<br>🗓️ ${esc(r.available_time)}` : '');
+      const who = mine === 'teacher' ? `<br>👤 From: <b>${esc(r.student_name || 'A student')}</b>` : `<br>👤 Teacher: <b>${esc(r.teacher_name || '')}</b>`;
+      const details = [r.level, r.chapter].filter(Boolean).map(x => esc(x)).join(' · ');
+      const sent = r.created_at ? `<br>🕐 Sent: ${esc(fmtWhen(r.created_at))}` : '';
+      const when = (r.class_start ? `<br>🗓️ Class: ${esc(new Date(r.class_start).toLocaleString())} · <b>${esc(timeUntil(r.class_start))}</b>` : '') + (r.available_time ? `<br>🕒 Available: ${esc(r.available_time)}` : '');
       const ext = r.extension_status === 'Requested' ? '<p class="muted">⏳ Extension requested — waiting for microedu</p>' : r.extension_status === 'Approved' ? `<p class="muted">✅ Extra ${r.extension_minutes} min approved by microedu</p>` : '';
-      return `<div class="req-card"><p><b>GID: ${esc(r.gid)}</b> · ${esc(r.subject)} — ${esc(r.topic)}<br>${r.hours} hr × BDT ${r.rate_bdt_per_hour} = <b>BDT ${r.amount_bdt}</b>${when}</p>${tracker(r)}${respLine}<p>${escrowLine(r)}</p>${ext}${btns.length ? `<p style="display:flex;gap:8px;flex-wrap:wrap">${btns.join('')}</p>` : ''}</div>`;
+      return `<div class="req-card"><p><b>GID: ${esc(r.gid)}</b> · ${esc(r.subject)} — ${esc(r.topic)}${details ? `<br>${details}` : ''}<br>${r.hours} hr × BDT ${r.rate_bdt_per_hour} = <b>BDT ${r.amount_bdt}</b>${who}${sent}${when}</p>${tracker(r)}${respLine}<p>${escrowLine(r)}</p>${ext}${payBox}${btns.length ? `<p style="display:flex;gap:8px;flex-wrap:wrap">${btns.join('')}</p>` : ''}</div>`;
     };
     setHtml('myRequests', d.asStudent.map(r => render(r, 'student')).join('') || '<p class="muted">None yet</p>');
     setHtml('teacherReqs', d.asTeacher.map(r => render(r, 'teacher')).join('') || '<p class="muted">None yet</p>');
+    renderNotifications(d);
     loadWallet();
   } catch (e) { /* not signed in */ }
 }
+/* Notifications: new requests land here for the teacher (with the Accept /
+   Decline buttons right on the notification), and the student sees here
+   when a teacher accepts or declines. The card hides when there is none. */
+function renderNotifications(d) {
+  const el = $('notifList'); const card = $('notifCard'); if (!el || !card) return;
+  const items = [];
+  for (const r of d.asTeacher) {
+    if (r.status === 'Pending' && (r.teacher_response || 'Waiting') === 'Waiting') {
+      items.push(`<div class="notif-item"><p>📩 <b>New request</b> from <b>${esc(r.student_name || 'a student')}</b> — ${esc(r.subject)} · ${esc(r.topic)}<br>🕐 Sent: ${esc(fmtWhen(r.created_at))}${r.class_start ? `<br>🗓️ Class: ${esc(new Date(r.class_start).toLocaleString())} · <b>${esc(timeUntil(r.class_start))}</b>` : ''}${r.available_time ? `<br>🕒 Available: ${esc(r.available_time)}` : ''}</p><p style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="respondReq('${r.gid}','Accepted')">✅ Accept — I will teach this</button><button class="btn btn-ghost btn-sm" onclick="respondReq('${r.gid}','Declined')">Decline</button></p></div>`);
+    }
+  }
+  for (const r of d.asStudent) {
+    if (r.teacher_response === 'Accepted' && r.status === 'Pending') {
+      items.push(`<div class="notif-item"><p>✅ <b>${esc(r.teacher_name || 'The teacher')}</b> accepted your request — ${esc(r.subject)} · ${esc(r.topic)}. You can now confirm payment in My Requests below.</p></div>`);
+    }
+    if (r.teacher_response === 'Declined') {
+      items.push(`<div class="notif-item"><p>❌ <b>${esc(r.teacher_name || 'The teacher')}</b> declined your request — ${esc(r.subject)} · ${esc(r.topic)}.</p></div>`);
+    }
+  }
+  card.classList.toggle('hidden', !items.length);
+  el.innerHTML = items.join('');
+}
+/* bKash advance payment: student submits the TrxID; microedu verifies. */
+window.submitTrx = async gid => {
+  const trx = (($('trx-' + gid) || {}).value || '').trim();
+  const snd = (($('snd-' + gid) || {}).value || '').trim();
+  if (!trx) return alert('Please enter the bKash transaction ID (TrxID) first.');
+  try { await api('/api/payments/submit', { method: 'POST', body: JSON.stringify({ gid, trxid: trx, sender: snd }) }); alert('TrxID submitted — microedu will verify your payment.'); loadMine(); } catch (e) { alert(e.message); }
+};
+async function loadVerify() {
+  if (!token) return;
+  try {
+    const d = await api('/api/payments/to-verify');
+    const el = $('verifyList'); if (!el) return;
+    el.innerHTML = d.payments.length ? d.payments.map(p => `<div class="req-card"><p><b>GID: ${esc(p.gid)}</b> · ${esc(p.subject)} — ${esc(p.topic)}<br>Student: <b>${esc(p.student_name || '')}</b> → Teacher: <b>${esc(p.teacher_name || '')}</b><br>💳 <b>BDT ${p.amount_bdt}</b> · TrxID: <b>${esc(p.trxid)}</b>${p.sender ? ' · From: ' + esc(p.sender) : ''}</p><p style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="verifyPay('${p.gid}',true)">✅ Verify — hold the money</button><button class="btn btn-ghost btn-sm" onclick="verifyPay('${p.gid}',false)">Reject</button></p></div>`).join('') : '<p class="muted">No bKash payments waiting for verification.</p>';
+  } catch (e) { /* not admin */ }
+}
+window.verifyPay = async (gid, ok) => {
+  if (!ok && !confirm('Reject this TrxID? The student will be asked to submit it again.')) return;
+  try { await api('/api/payments/verify', { method: 'POST', body: JSON.stringify({ gid, ok }) }); loadVerify(); loadMine(); } catch (e) { alert(e.message); }
+};
 window.joinClass = async gid => { try { const d = await api('/api/requests/join', { method: 'POST', body: JSON.stringify({ gid }) }); window.open(d.class_link, '_blank'); } catch (e) { alert(e.message); } };
 window.extendReq = async gid => { try { await api('/api/requests/extend', { method: 'POST', body: JSON.stringify({ gid, minutes: 30 }) }); alert('Extension requested — microedu will approve it.'); loadMine(); } catch (e) { alert(e.message); } };
 window.refundReq = async gid => { if (!confirm('Refund this class in full? The booking will be cancelled.')) return; try { await api('/api/payments/refund', { method: 'POST', body: JSON.stringify({ gid }) }); loadMine(); } catch (e) { alert(e.message); } };
@@ -500,7 +576,32 @@ async function restoreSession() {
   if (!token || !$('profileBox')) return;
   try { const d = await api('/api/me'); me = d.person; showProfile(d.person, d.cv); } catch (e) { /* stale token */ }
 }
-function loadAll() { loadTeachers(); loadPeople(); loadMine(); restoreSession(); }
+/* Signed-in state in the top menu bar, on every page: the member's own
+   photo, name and ID replace Sign In / Join Free, with a notification
+   bell (badge = new requests waiting + my accepted requests) and a
+   Sign Out button. Signed-out visitors keep the default bar. */
+async function updateHeaderUser() {
+  if (!token) return;
+  const actions = document.querySelector('.top-actions');
+  if (!actions || actions.querySelector('.user-chip')) return;
+  try {
+    const d = await api('/api/me'); me = d.person;
+    actions.querySelectorAll('a[href="dashboard"], a[href="register"]').forEach(a => { a.style.display = 'none'; });
+    const chip = document.createElement('span');
+    chip.className = 'user-chip';
+    chip.innerHTML = `${avatarHtml(d.person)}<a class="user-name" href="dashboard">${esc(displayName(d.person))}<small>Member ID ${d.person.id}</small></a><a class="bell" href="dashboard" title="Notifications">🔔<span class="bell-badge hidden" id="bellBadge"></span></a><button type="button" class="btn btn-ghost btn-sm" id="hdrSignOut">Sign Out</button>`;
+    actions.appendChild(chip);
+    $('hdrSignOut').onclick = () => { token = ''; localStorage.removeItem('microedu_token'); localStorage.removeItem('d2d_token'); location.href = '/'; };
+    try {
+      const mr = await api('/api/my-requests');
+      const n = mr.asTeacher.filter(r => r.status === 'Pending' && (r.teacher_response || 'Waiting') === 'Waiting').length
+        + mr.asStudent.filter(r => r.status === 'Pending' && r.teacher_response === 'Accepted').length;
+      const b = $('bellBadge');
+      if (b && n > 0) { b.textContent = n; b.classList.remove('hidden'); }
+    } catch (e) { /* bell stays without a badge */ }
+  } catch (e) { /* stale token: leave the default bar */ }
+}
+function loadAll() { loadTeachers(); loadPeople(); loadMine(); restoreSession(); updateHeaderUser(); }
 /* "I Need Help" needs an identified member: without sign-in there is no
    way to know who is asking, so the help page sends the visitor to the
    sign-in page first and brings them back here after signing in. */
@@ -536,7 +637,7 @@ const BN = {
   heroPill: '🎓 মাইক্রো এডু. সাপোর্ট — লাইভ ১-টু-১ অনলাইন টিউশন',
   heroTitle: 'একটা টপিকে আটকে গেছেন?<br>আসল শিক্ষকের কাছে <span class="u-line">লাইভ</span> শিখুন।',
   heroLead: 'একবার রেজিস্টার করুন, যাচাই করা শিক্ষক বেছে নিন, ঠিক কোন অধ্যায় বা টপিকে আটকে আছেন তা লিখুন — আর আপনার সময়ে লাইভ ক্লাসে যোগ দিন। যেকোনো বিষয়, যেকোনো লেভেল, বাংলাদেশের যেকোনো জায়গা থেকে।',
-  heroFind: 'আমাদের শিক্ষকগণ →', heroJoinTeacher: 'শিক্ষক হিসেবে যোগ দিন',
+  heroFind: 'শিক্ষক খুঁজুন →', heroJoinTeacher: 'শিক্ষক হিসেবে যোগ দিন',
   heroP1: '✔ যাচাই করা শিক্ষকের সিভি', heroP2: '✔ যেকোনো বিষয়, যেকোনো লেভেল', heroP3: '✔ সম্পূর্ণ টাকা ফেরতের গ্যারান্টি',
   fc1t: 'বিশ্বস্ত শিক্ষক', fc1s: 'প্রতিটি প্রোফাইলে বিস্তারিত সিভি',
   fc2t: 'লাইভ ক্লাসের লিংক', fc2s: 'প্রাইভেট ভিডিও রুম, আপনার সময়ে',
@@ -562,7 +663,7 @@ const BN = {
   tick2: 'প্রতিটি ক্লাসে পরিষ্কার স্ট্যাটাস: Pending → Confirm → Ongoing → Done',
   tick3: 'শিক্ষকের আয় জমে ওয়ালেটে, যেকোনো সময় উত্তোলন',
   tick4: 'ক্লাসের পর ছাত্ররা রেটিং, রিভিউ ও অভিযোগ জানাতে পারে',
-  meetTeachers: 'শিক্ষকদের দেখুন →',
+  meetTeachers: 'শিক্ষক সাজেশন নিন →',
   subEyebrow: '— সাবস্ক্রিপশন', subTitle: 'সবার জন্য সহজ <span class="u-line">প্ল্যান</span>।',
   subSubText: 'প্রতিটি সদস্যের জন্য একটি প্ল্যান তালিকা — একই অ্যাকাউন্টে শিখুন ও পড়ান। মেয়াদ বেছে নিন ১, ৩, ৬ বা ১২ মাস। স্ট্যাটাস শুরু হয় Pending দিয়ে — কনফার্ম করলেই সক্রিয়।',
   perMonth: '/মাস', popular: 'জনপ্রিয়',
@@ -598,7 +699,7 @@ const BN = {
   forgotLink: 'পাসওয়ার্ড ভুলে গেছেন?', forgotTitle: '🔑 পাসওয়ার্ড ভুলে গেছেন?',
   forgotNote: 'আপনার রেজিস্টার করা ইমেইল লিখুন। microedu আপনার পাসওয়ার্ড সাধারণ স্টার্টার পাসওয়ার্ডে রিসেট করে Gmail-এ জানিয়ে দেবে। তারপর সেটা দিয়ে সাইন ইন করে প্রোফাইল থেকে পাসওয়ার্ড বদলে নিন।',
   forgotBtn: 'microedu-কে আমার পাসওয়ার্ড রিসেট করতে বলুন',
-  adminPwTitle: '🔑 পাসওয়ার্ড রিসেটের অনুরোধ',
+  adminPwTitle: '🔑 পাসওয়ার্ড রিসেটের অনুরোধ', adminPayTitle: '💳 যাচাইয়ের অপেক্ষায় bKash পেমেন্ট',
   lblRate: 'রেট (টাকা / ঘণ্টা)',
   lblExpTime: 'বিষয়ভিত্তিক সময়', phExpTime: 'পরিসংখ্যান: শনি–বৃহস্পতি সন্ধ্যা ৬–৮টা · Excel: শুক্রবার সকাল ১০টা–১২টা',
   lblCvFile: 'সিভি ফাইল (ফাইলের নাম সংরক্ষিত হয়)', regSubmit: 'রেজিস্টার করুন — সম্পূর্ণ ফ্রি',
@@ -607,7 +708,7 @@ const BN = {
   lblFullNamePlain: 'পুরো নাম', lblAppear: 'আপনি কীভাবে দেখাবেন',
   lblCurPass: 'বর্তমান পাসওয়ার্ড', lblNewPass: 'নতুন পাসওয়ার্ড', lblNewPass2: 'নতুন পাসওয়ার্ড আবার',
   saveDetailsBtn: 'আমার তথ্য সেভ করুন', changePassBtn: 'পাসওয়ার্ড বদলান',
-  phYourPass: 'আপনার পাসওয়ার্ড', signOutBtn: 'সাইন আউট', myProfile: 'আমার প্রোফাইল',
+  phYourPass: 'আপনার পাসওয়ার্ড', signOutBtn: 'সাইন আউট', myProfile: 'আমার প্রোফাইল', notifTitle: '🔔 নোটিফিকেশন',
   walletTitle: 'আমার ওয়ালেট', forTeachers: '(শিক্ষকদের জন্য)', lblBalance: 'ব্যালেন্স:',
   lblWithdrawAmt: 'উত্তোলনের পরিমাণ (টাকা)', withdrawBtn: 'উত্তোলন করুন',
   reqToMeTitle: 'আমার কাছে আসা রিকোয়েস্ট', feedbackTitle: '⭐ মূল্যায়ন / ফিডব্যাক',
