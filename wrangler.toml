@@ -9,7 +9,7 @@
 # Bindings > Add > D1 database, variable name "DB", database
 # "d2d-microedu-db" — the Worker only needs env.DB + env.ASSETS.
 
-name = "d2d-microedu"
+name = "microedu"
 main = "cloudflare/worker.js"
 compatibility_date = "2025-01-01"
 workers_dev = true
