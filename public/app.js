@@ -458,16 +458,19 @@ async function loadMine() {
       const isMoney = r.pay_with !== 'time' && Number(r.amount_bdt) > 0;
       if (r.status === 'Pending' && resp === 'Accepted' && !isMoney) btns.push(`<button class="btn btn-primary btn-sm" onclick="advance('${r.gid}','Confirm')">Confirm Payment</button>`);
       let payBox = '';
-      if (mine === 'student' && r.status === 'Pending' && resp === 'Accepted' && isMoney) {
+      /* The bKash box shows until the payment is verified — including on
+         bookings that reached Confirm under the old one-click flow, so a
+         student can never be stuck without a way to pay. */
+      if (mine === 'student' && resp === 'Accepted' && isMoney && !Number(r.verified) && ['Pending', 'Confirm'].includes(r.status)) {
         if (r.trxid && !r.rejected) {
           payBox = `<div class="pay-box"><p>🧾 <b>bKash payment submitted</b> — TrxID: <b>${esc(r.trxid)}</b>${r.sender ? ' · From: ' + esc(r.sender) : ''}<br><span class="muted">microedu is verifying your payment. Once verified, the money is Held safely and your class is confirmed.</span></p></div>`;
         } else {
           payBox = `<div class="pay-box"><p>💳 <b>Pay BDT ${r.amount_bdt} by bKash</b> to <b>01729-071571</b> (microedu), then enter your transaction ID:</p>${r.rejected ? '<p><span class="escrow refunded">❌ microedu could not verify the last TrxID — please check it and submit again.</span></p>' : ''}<p style="display:flex;gap:8px;flex-wrap:wrap"><input id="trx-${r.gid}" placeholder="bKash TrxID" style="flex:1;min-width:150px"><input id="snd-${r.gid}" placeholder="Your bKash number" style="flex:1;min-width:140px"><button class="btn btn-primary btn-sm" onclick="submitTrx('${r.gid}')">Submit TrxID</button></p></div>`;
         }
       }
-      if (r.status === 'Confirm') btns.push(`<button class="btn btn-primary btn-sm" onclick="advance('${r.gid}','Ongoing')">Start (Ongoing)</button>`);
+      if (r.status === 'Confirm' && (!isMoney || Number(r.verified))) btns.push(`<button class="btn btn-primary btn-sm" onclick="advance('${r.gid}','Ongoing')">Start (Ongoing)</button>`);
       if (r.status === 'Ongoing') btns.push(`<button class="btn btn-primary btn-sm" onclick="advance('${r.gid}','Done')">Mark Done</button>`);
-      if (['Confirm', 'Ongoing'].includes(r.status)) btns.push(`<button class="btn btn-orange btn-sm" onclick="joinClass('${r.gid}')">Join Class</button>`);
+      if (['Confirm', 'Ongoing'].includes(r.status) && (!isMoney || Number(r.verified) || r.status === 'Ongoing')) btns.push(`<button class="btn btn-orange btn-sm" onclick="joinClass('${r.gid}')">Join Class</button>`);
       if (['Confirm', 'Ongoing'].includes(r.status) && r.extension_status !== 'Requested') btns.push(`<button class="btn btn-ghost btn-sm" onclick="extendReq('${r.gid}')">Request +30 min</button>`);
       if (mine === 'student' && r.escrow_status === 'Held' && r.status !== 'Done') btns.push(`<button class="btn btn-ghost btn-sm" onclick="refundReq('${r.gid}')">Problem? Refund to me</button>`);
       const who = mine === 'teacher' ? `<br>👤 From: <b>${esc(r.student_name || 'A student')}</b>` : `<br>👤 Teacher: <b>${esc(r.teacher_name || '')}</b>`;

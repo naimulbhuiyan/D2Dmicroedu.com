@@ -585,7 +585,7 @@ const routes = {
     const b = await body(request);
     const r = await db.prepare('SELECT * FROM tuition_requests WHERE gid=?').bind(b.gid || '').first();
     if (!r || r.student_id !== me.id) return send({ error: 'Request not found' }, 404);
-    if (r.teacher_response !== 'Accepted' || r.status !== 'Pending') return send({ error: 'The teacher must accept first' }, 400);
+    if (r.teacher_response !== 'Accepted' || !['Pending', 'Confirm'].includes(r.status)) return send({ error: 'The teacher must accept first' }, 400);
     if (r.pay_with === 'time' || Number(r.amount_bdt) <= 0) return send({ error: 'This class needs no bKash payment' }, 400);
     const trxid = String(b.trxid || '').trim().toUpperCase();
     if (trxid.length < 6) return send({ error: 'Please enter the bKash transaction ID (TrxID)' }, 400);
@@ -684,6 +684,12 @@ const routes = {
     if (!r) return send({ error: 'Request not found' }, 404);
     if (r.student_id !== me.id && r.teacher_id !== me.id) return send({ error: 'Only this class\u2019s student and teacher can join it' }, 403);
     if (!['Confirm', 'Ongoing'].includes(r.status)) return send({ error: 'Class is not confirmed yet' }, 403);
+    /* Advance payment rule: a money class cannot start until microedu has
+       verified the student's bKash payment. */
+    if (r.pay_with !== 'time' && Number(r.amount_bdt) > 0) {
+      const pay = await db.prepare('SELECT verified FROM payments WHERE gid=? ORDER BY id DESC LIMIT 1').bind(r.gid).first();
+      if (!pay || !pay.verified) return send({ error: 'Payment not verified yet — the student pays by bKash first and microedu verifies it' }, 403);
+    }
     const w = joinWindow(r);
     if (!w.ok) return send({ error: w.reason === 'too_early' ? 'Too early \u2014 the class opens 15 minutes before its booked time' : 'This class time is over \u2014 ask microedu for an extension', reason: w.reason }, 403);
     return send({ class_link: r.class_link, closes_at: w.closes_at || null }, 200);
