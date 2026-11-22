@@ -556,7 +556,10 @@ const routes = {
       amount = 0;
     }
     const g = await newGid(db);
-    const link = 'https://meet.google.com/' + g;
+    /* Private Jitsi room with an unguessable random name. The room name is
+       never shown anywhere — it is handed out only by /api/requests/join,
+       inside the booked time window, to the booking's own student/teacher. */
+    const link = 'https://meet.jit.si/microedu-' + randomHex(16);
     const info = await db.prepare("INSERT INTO tuition_requests(gid,student_id,teacher_id,level,subject,chapter,topic,hours,rate_bdt_per_hour,amount_bdt,available_time,status,class_link,class_start,pay_with) VALUES(?,?,?,?,?,?,?,?,?,?,?,'Pending',?,?,?)")
       .bind(g, me.id, t.id, b.level || null, b.subject, b.chapter || null, b.topic, hours, rate, amount, b.available_time || null, link, b.class_start || null, payWith).run();
     await db.prepare("INSERT INTO payments(gid,person_id,amount_bdt,status) VALUES(?,?,?,'Pending')").bind(g, me.id, amount).run();
