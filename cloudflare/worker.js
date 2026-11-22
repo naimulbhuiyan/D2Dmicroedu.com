@@ -842,9 +842,13 @@ const routes = {
       const out = [];
       for (const r of rows) {
         const pay = await db.prepare('SELECT escrow_status, status, trxid, sender, verified, rejected FROM payments WHERE gid=? ORDER BY id DESC LIMIT 1').bind(r.gid).first();
-        const sn = await db.prepare('SELECT name FROM registered_people WHERE id=?').bind(r.student_id).first();
-        const tn = await db.prepare('SELECT name FROM registered_people WHERE id=?').bind(r.teacher_id).first();
-        out.push({ ...stripLink(r), escrow_status: pay ? pay.escrow_status : 'Awaiting payment', pay_status: pay ? pay.status : null, trxid: pay ? pay.trxid : null, sender: pay ? pay.sender : null, verified: pay ? pay.verified : 0, rejected: pay ? pay.rejected : 0, student_name: sn ? sn.name : null, teacher_name: tn ? tn.name : null });
+        const sn = await db.prepare('SELECT name, photo_mode FROM registered_people WHERE id=?').bind(r.student_id).first();
+        const tn = await db.prepare('SELECT name, photo_mode FROM registered_people WHERE id=?').bind(r.teacher_id).first();
+        /* Anonymous members stay anonymous inside requests too: the other
+           side sees only "Anonymous student/teacher". The member themself
+           and microedu (admin, id 1) still see the real name. */
+        const shownName = (row, pid, label) => (!row ? null : (row.photo_mode === 'anonymous' && me.id !== pid && me.id !== 1 ? label : row.name));
+        out.push({ ...stripLink(r), escrow_status: pay ? pay.escrow_status : 'Awaiting payment', pay_status: pay ? pay.status : null, trxid: pay ? pay.trxid : null, sender: pay ? pay.sender : null, verified: pay ? pay.verified : 0, rejected: pay ? pay.rejected : 0, student_name: shownName(sn, r.student_id, 'Anonymous student'), teacher_name: shownName(tn, r.teacher_id, 'Anonymous teacher') });
       }
       return out;
     };

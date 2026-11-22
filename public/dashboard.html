@@ -88,6 +88,12 @@
       </div>
 
       <div id="dashMain" class="hidden">
+      <div class="card" id="anonCard">
+        <h3 data-i18n="anonTitle">🕶️ Anonymous mode</h3>
+        <label style="display:flex;gap:10px;align-items:center;font-size:16px;cursor:pointer"><input type="checkbox" id="anonToggle" style="width:20px;height:20px"> <span data-i18n="anonLabel">Hide my name, photo and phone number from everyone</span></label>
+        <p class="muted" data-i18n="anonHint">When this is on, other members see you only as “Anonymous” — but your education and qualifications still show, so you can teach anyone, or take help from anyone, without revealing who you are. microedu can still see your details.</p>
+        <div class="msg" id="anonMsg"></div>
+      </div>
       <div class="card hidden" id="notifCard">
         <h3 data-i18n="notifTitle">🔔 Notifications</h3>
         <div id="notifList"></div>

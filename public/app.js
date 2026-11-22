@@ -246,7 +246,21 @@ function prefillDetailsForm(p) {
   $('dMobile').value = p.mobile || '';
   $('dPhotoMode').value = p.photo_mode || 'personal';
   $('dGroupName').value = p.group_name || '';
+  const at = $('anonToggle'); if (at) at.checked = p.photo_mode === 'anonymous';
 }
+/* Anonymous mode toggle: one switch for the whole member — as a teacher
+   AND as a student, their name, photo and phone stay hidden from other
+   members; qualifications still show. microedu still sees the details. */
+on('anonToggle', 'change', async e => {
+  const on_ = e.target.checked;
+  try {
+    const d = await api('/api/me/update', { method: 'POST', body: JSON.stringify({ photo_mode: on_ ? 'anonymous' : 'personal' }) });
+    me = d.person;
+    prefillDetailsForm(d.person);
+    msg($('anonMsg'), on_ ? 'Anonymous mode is ON — members now see you only as “Anonymous”.' : 'Anonymous mode is OFF — your name and photo are visible again.');
+    loadAll();
+  } catch (err) { e.target.checked = !on_; msg($('anonMsg'), err.message, false); }
+});
 
 /* ---------- microedu admin: extension approvals (site owner, member #1) ---------- */
 async function loadExtensions() {
@@ -730,6 +744,8 @@ const BN = {
   lblCurPass: 'বর্তমান পাসওয়ার্ড', lblNewPass: 'নতুন পাসওয়ার্ড', lblNewPass2: 'নতুন পাসওয়ার্ড আবার',
   saveDetailsBtn: 'আমার তথ্য সেভ করুন', changePassBtn: 'পাসওয়ার্ড বদলান',
   phYourPass: 'আপনার পাসওয়ার্ড', signOutBtn: 'সাইন আউট', myProfile: 'আমার প্রোফাইল', notifTitle: '🔔 নোটিফিকেশন',
+  anonTitle: '🕶️ অজ্ঞাত মোড', anonLabel: 'সবার কাছ থেকে আমার নাম, ছবি ও ফোন নম্বর লুকিয়ে রাখুন',
+  anonHint: 'এটা চালু থাকলে অন্য সদস্যরা আপনাকে শুধু “Anonymous” হিসেবেই দেখবে — কিন্তু আপনার শিক্ষাগত যোগ্যতা দেখা যাবে, তাই পরিচয় না দিয়েই আপনি যে কাউকে পড়াতে বা যে কারো কাছ থেকে সাহায্য নিতে পারবেন। microedu আপনার তথ্য দেখতে পারবে।',
   walletTitle: 'আমার ওয়ালেট', forTeachers: '(শিক্ষকদের জন্য)', lblBalance: 'ব্যালেন্স:',
   lblWithdrawAmt: 'উত্তোলনের পরিমাণ (টাকা)', withdrawBtn: 'উত্তোলন করুন',
   reqToMeTitle: 'আমার কাছে আসা রিকোয়েস্ট', feedbackTitle: '⭐ মূল্যায়ন / ফিডব্যাক',
