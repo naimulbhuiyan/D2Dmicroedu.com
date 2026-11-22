@@ -71,9 +71,8 @@
             <div class="row"><div><label data-i18n="lblFullNamePlain">Full name</label><input id="dName"></div>
             <div><label data-i18n="lblPhone">Phone</label><input id="dPhone"></div></div>
             <div class="row"><div><label data-i18n="lblMobile">Mobile</label><input id="dMobile"></div>
-            <div><label data-i18n="lblAppear">How you appear</label><select id="dPhotoMode"><option value="personal" data-i18n="photoPersonal">My photo</option><option value="group" data-i18n="photoGroup">Group photo</option><option value="anonymous" data-i18n="photoAnon">Anonymous</option></select></div></div>
-            <div class="row"><div><label data-i18n="lblGroupName">Group name (if group photo)</label><input id="dGroupName"></div>
-            <div><label data-i18n="lblPhoto">New photo (optional)</label><input id="dPhotoFile" type="file" accept="image/*"></div></div>
+            <div><label data-i18n="lblAppear">How you appear</label><select id="dPhotoMode"><option value="personal" data-i18n="photoPersonal">My name</option><option value="group" data-i18n="photoGroup">Group name</option><option value="anonymous" data-i18n="photoAnon">Anonymous</option></select></div></div>
+            <div class="row"><div><label data-i18n="lblGroupName">Group name (if group)</label><input id="dGroupName"></div></div>
             <p><button class="btn btn-primary btn-sm" type="submit" data-i18n="saveDetailsBtn">Save my details</button></p>
             <div class="msg" id="detailsMsg"></div>
           </form>
@@ -91,7 +90,7 @@
       <div id="dashMain" class="hidden">
       <div class="card" id="anonCard">
         <h3 data-i18n="anonTitle">🕶️ Anonymous mode</h3>
-        <label style="display:flex;gap:10px;align-items:center;font-size:16px;cursor:pointer"><input type="checkbox" id="anonToggle" style="width:20px;height:20px"> <span data-i18n="anonLabel">Hide my name, photo and phone number from everyone</span></label>
+        <label style="display:flex;gap:10px;align-items:center;font-size:16px;cursor:pointer"><input type="checkbox" id="anonToggle" style="width:20px;height:20px"> <span data-i18n="anonLabel">Hide my name and phone number from everyone</span></label>
         <p class="muted" data-i18n="anonHint">When this is on, other members see you only as “Anonymous” — but your education and qualifications still show, so you can teach anyone, or take help from anyone, without revealing who you are. microedu can still see your details.</p>
         <div class="msg" id="anonMsg"></div>
       </div>

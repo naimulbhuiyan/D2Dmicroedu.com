@@ -28,29 +28,12 @@ function fillPlans() { const s = $('subPlan'); if (s) s.innerHTML = PLANS.map(p 
 fillPlans();
 const fmtMins = m => { m = Math.round(Number(m) || 0); const h = Math.floor(m / 60), r = m % 60; return h ? `${h}h ${r}m` : `${r}m`; };
 
-/* ---------- photo: personal / group / anonymous ---------- */
+/* ---------- how a member appears: name / group name / anonymous ----------
+   Photos are not used on microedu (removed by decision, 22 Nov 2026) —
+   everyone is shown by name with an initials avatar, or anonymously. */
 function photoMode() { const r = document.querySelector('input[name="photoMode"]:checked'); return r ? r.value : 'personal'; }
 document.querySelectorAll('input[name="photoMode"]').forEach(r => r.onchange = () => {
-  const mode = photoMode();
-  const gw = $('groupNameWrap'); if (gw) gw.classList.toggle('hidden', mode !== 'group');
-  $('rPhotoFile').disabled = mode === 'anonymous';
-  if (mode === 'anonymous') { photoDataUrl = ''; $('photoPreview').classList.remove('show'); }
-});
-on('rPhotoFile', 'onchange', () => {
-  const f = $('rPhotoFile').files[0];
-  if (!f) return;
-  const img = new Image();
-  img.onload = () => {
-    const max = 480, scale = Math.min(1, max / Math.max(img.width, img.height));
-    const c = document.createElement('canvas');
-    c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
-    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-    photoDataUrl = c.toDataURL('image/jpeg', 0.82);
-    $('photoPreview').src = photoDataUrl;
-    $('photoPreview').classList.add('show');
-    URL.revokeObjectURL(img.src);
-  };
-  img.src = URL.createObjectURL(f);
+  const gw = $('groupNameWrap'); if (gw) gw.classList.toggle('hidden', photoMode() !== 'group');
 });
 
 /* ---------- pricing choice (teacher profile form) ---------- */
@@ -95,7 +78,7 @@ on('regForm', 'onsubmit', async e => {
       phone: $('rPhone').value, mobile: $('rMobile').value,
       picture: $('rPhotoFile').files[0] ? $('rPhotoFile').files[0].name : '',
       photo_mode: mode, group_name: $('rGroupName').value,
-      photo_data: mode === 'anonymous' ? '' : photoDataUrl,
+      photo_data: '',
     }) });
     saveToken(d.token); me = d.person; showProfile(d.person, d.cv);
     showRegSuccess(d.person);
@@ -203,28 +186,12 @@ on('signOut', 'onclick', () => {
 });
 
 /* ---------- edit my details & change password (dashboard) ---------- */
-let dPhotoDataUrl = '';
-on('dPhotoFile', 'onchange', () => {
-  const f = $('dPhotoFile').files[0];
-  if (!f) return;
-  const img = new Image();
-  img.onload = () => {
-    const max = 480, scale = Math.min(1, max / Math.max(img.width, img.height));
-    const c = document.createElement('canvas');
-    c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
-    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-    dPhotoDataUrl = c.toDataURL('image/jpeg', 0.82);
-    URL.revokeObjectURL(img.src);
-  };
-  img.src = URL.createObjectURL(f);
-});
 on('detailsForm', 'onsubmit', async e => {
   e.preventDefault();
   const payload = { name: $('dName').value, phone: $('dPhone').value, mobile: $('dMobile').value, photo_mode: $('dPhotoMode').value, group_name: $('dGroupName').value };
-  if (dPhotoDataUrl) payload.photo_data = dPhotoDataUrl;
   try {
     const d = await api('/api/me/update', { method: 'POST', body: JSON.stringify(payload) });
-    me = d.person; dPhotoDataUrl = '';
+    me = d.person;
     showProfile(d.person, d.cv);
     msg($('detailsMsg'), 'Your details are saved.');
     loadAll();
@@ -802,9 +769,9 @@ const BN = {
   regEyebrow: '— রেজিস্ট্রেশন', regTitle: 'এখনই <span class="u-line">রেজিস্টার</span> করুন।',
   regSub: 'শুধু নাম, ইমেইল আর ফোন — এক মিনিটে রেজিস্টার করে এখনই শেখা শুরু করুন। ছাত্র/শিক্ষক আলাদা নয়। পড়াতে চাইলে পরে ড্যাশবোর্ড থেকে শিক্ষক প্রোফাইল সম্পূর্ণ করুন।',
   photoQ: 'আপনি কীভাবে দেখাতে চান?',
-  photoPersonal: 'আমার ছবি', photoPersonalSub: 'আপনার নিজের প্রোফাইল ছবি',
-  photoGroup: 'গ্রুপ ছবি', photoGroupSub: 'কোনো গ্রুপ / টিমের জন্য',
-  photoAnon: 'অজ্ঞাত (Anonymous)', photoAnonSub: 'নাম ও ছবি লুকানো থাকবে',
+  photoPersonal: 'আমার নাম', photoPersonalSub: 'আপনার নাম দেখানো হবে',
+  photoGroup: 'গ্রুপ নাম', photoGroupSub: 'কোনো গ্রুপ / টিমের জন্য',
+  photoAnon: 'অজ্ঞাত (Anonymous)', photoAnonSub: 'নাম লুকানো থাকবে',
   lblPhoto: 'ছবি', lblGroupName: 'গ্রুপের নাম (গ্রুপ ছবি হলে)', phGroupName: 'যেমন: Dhaka Study Circle',
   cvTitle: 'আপনার বিস্তারিত সিভি', mandatory: '(বাধ্যতামূলক)',
   lblFullName: 'পুরো নাম *', phName: 'আপনার পুরো নাম', lblEmail: 'ইমেইল *', phEmail: 'you@example.com',
@@ -840,7 +807,7 @@ const BN = {
   navBranches: 'ব্রাঞ্চসমূহ', brEyebrow: '— ব্রাঞ্চ', brTitle: 'ব্রাঞ্চ অনুযায়ী <span class="u-line">সাহায্য</span> খুঁজুন।',
   brSub: 'স্কুল, কলেজ বা বিশ্ববিদ্যালয় — বিষয় বেছে নিন আর দেখুন কোন শিক্ষকরা ওই বিষয়ে সাহায্য করতে পারবেন। বিষয়ে চাপ দিলে সাহায্যের ফর্ম তৈরি হয়ে যাবে, শিক্ষকের নামে চাপ দিলে সরাসরি ওই শিক্ষককেই চাওয়া যাবে।',
   brPH: '⭐ পাবলিক হেলথ — আমাদের বিশেষ ব্রাঞ্চ', brPHSub: 'পাবলিক হেলথ বিশেষজ্ঞ ও শিক্ষক, বিশেষভাবে চিহ্নিত।',
-  anonTitle: '🕶️ অজ্ঞাত মোড', anonLabel: 'সবার কাছ থেকে আমার নাম, ছবি ও ফোন নম্বর লুকিয়ে রাখুন',
+  anonTitle: '🕶️ অজ্ঞাত মোড', anonLabel: 'সবার কাছ থেকে আমার নাম ও ফোন নম্বর লুকিয়ে রাখুন',
   anonHint: 'এটা চালু থাকলে অন্য সদস্যরা আপনাকে শুধু “Anonymous” হিসেবেই দেখবে — কিন্তু আপনার শিক্ষাগত যোগ্যতা দেখা যাবে, তাই পরিচয় না দিয়েই আপনি যে কাউকে পড়াতে বা যে কারো কাছ থেকে সাহায্য নিতে পারবেন। microedu আপনার তথ্য দেখতে পারবে।',
   walletTitle: 'আমার ওয়ালেট', forTeachers: '(শিক্ষকদের জন্য)', lblBalance: 'ব্যালেন্স:',
   lblWithdrawAmt: 'উত্তোলনের পরিমাণ (টাকা)', withdrawBtn: 'উত্তোলন করুন',
