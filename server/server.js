@@ -17,7 +17,7 @@ CREATE INDEX IF NOT EXISTS idx_people_role ON registered_people(role);
 CREATE TABLE IF NOT EXISTS cv_details(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL UNIQUE REFERENCES registered_people(id) ON DELETE CASCADE, education TEXT NOT NULL, university TEXT NOT NULL, profession TEXT NOT NULL, position TEXT, experience TEXT NOT NULL, speciality TEXT NOT NULL, subjects TEXT NOT NULL, level TEXT NOT NULL, address TEXT NOT NULL, available_time TEXT, rate_bdt_per_hour REAL NOT NULL DEFAULT 500, pricing_type TEXT DEFAULT 'hourly', expertise_time TEXT, teacher_ready INTEGER DEFAULT 0, accepts_time_exchange INTEGER DEFAULT 0, cv_file_name TEXT);
 CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, person_id INTEGER NOT NULL REFERENCES registered_people(id) ON DELETE CASCADE, created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS subscriptions(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL REFERENCES registered_people(id) ON DELETE CASCADE, plan TEXT NOT NULL, months INTEGER NOT NULL, amount_bdt REAL NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'Pending', created_at TEXT DEFAULT (datetime('now')));
-CREATE TABLE IF NOT EXISTS tuition_requests(id INTEGER PRIMARY KEY AUTOINCREMENT, gid TEXT NOT NULL UNIQUE, student_id INTEGER NOT NULL REFERENCES registered_people(id), teacher_id INTEGER NOT NULL REFERENCES registered_people(id), level TEXT, subject TEXT NOT NULL, chapter TEXT, topic TEXT NOT NULL, hours REAL NOT NULL DEFAULT 1, rate_bdt_per_hour REAL NOT NULL DEFAULT 500, amount_bdt REAL NOT NULL, available_time TEXT, pay_with TEXT DEFAULT 'money', status TEXT NOT NULL DEFAULT 'Pending', class_link TEXT, class_start TEXT, extension_minutes INTEGER DEFAULT 0, extension_status TEXT DEFAULT 'None', created_at TEXT DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS tuition_requests(id INTEGER PRIMARY KEY AUTOINCREMENT, gid TEXT NOT NULL UNIQUE, student_id INTEGER NOT NULL REFERENCES registered_people(id), teacher_id INTEGER NOT NULL REFERENCES registered_people(id), level TEXT, subject TEXT NOT NULL, chapter TEXT, topic TEXT NOT NULL, hours REAL NOT NULL DEFAULT 1, rate_bdt_per_hour REAL NOT NULL DEFAULT 500, amount_bdt REAL NOT NULL, available_time TEXT, pay_with TEXT DEFAULT 'money', teacher_response TEXT DEFAULT 'Waiting', status TEXT NOT NULL DEFAULT 'Pending', class_link TEXT, class_start TEXT, extension_minutes INTEGER DEFAULT 0, extension_status TEXT DEFAULT 'None', created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS time_entries(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, gid TEXT, topic TEXT, minutes INTEGER NOT NULL, kind TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS password_resets(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, email TEXT NOT NULL, done INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS payments(id INTEGER PRIMARY KEY AUTOINCREMENT, gid TEXT NOT NULL, person_id INTEGER NOT NULL, amount_bdt REAL NOT NULL, method TEXT DEFAULT 'bKash', status TEXT NOT NULL DEFAULT 'Pending', escrow_status TEXT DEFAULT 'Awaiting payment', created_at TEXT DEFAULT (datetime('now')));
@@ -43,6 +43,8 @@ for (const sql of [
   'CREATE TABLE IF NOT EXISTS time_entries(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, gid TEXT, topic TEXT, minutes INTEGER NOT NULL, kind TEXT NOT NULL, created_at TEXT DEFAULT (datetime(\'now\')))',
   "UPDATE cv_details SET teacher_ready=1 WHERE teacher_ready=0 AND subjects IS NOT NULL AND subjects<>''",
   "CREATE TABLE IF NOT EXISTS password_resets(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, email TEXT NOT NULL, done INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')))",
+  "ALTER TABLE tuition_requests ADD COLUMN teacher_response TEXT DEFAULT 'Waiting'",
+  "UPDATE tuition_requests SET teacher_response='Accepted' WHERE status IN ('Confirm','Ongoing','Done') AND (teacher_response IS NULL OR teacher_response='Waiting')",
 ]) { try { db.exec(sql); } catch { /* column already exists */ } }
 
 const hashPw = pw => { const s = crypto.randomBytes(16).toString('hex'); return s + ':' + crypto.scryptSync(pw, s, 64).toString('hex'); };
@@ -264,6 +266,8 @@ const routes = {
     if (!r) return send(res,404,{error:'Request not found'});
     const next = b.status || 'Confirm';
     if (!['Confirm','Ongoing','Done'].includes(next)) return send(res,400,{error:'status must be Confirm, Ongoing or Done'});
+    /* The cycle: teacher accepts first, then the student confirms payment. */
+    if (next==='Confirm' && r.teacher_response!=='Accepted') return send(res,400,{error:'The teacher has not accepted this request yet'});
     db.prepare('UPDATE tuition_requests SET status=? WHERE gid=?').run(next,r.gid);
     if (next==='Confirm') db.prepare("UPDATE payments SET status='Confirm', escrow_status='Held' WHERE gid=?").run(r.gid);
     if (next==='Done') {
@@ -284,6 +288,21 @@ const routes = {
       }
       db.prepare("UPDATE payments SET escrow_status='Released' WHERE gid=?").run(r.gid);
     }
+    send(res,200,{request: stripLink(db.prepare('SELECT * FROM tuition_requests WHERE gid=?').get(r.gid))});
+  },
+  /* The teacher answers a request from their own dashboard ("Requests to
+     me"): Accept = willing, Decline = not willing (booking cancelled).
+     Only while Pending; the student sees the answer in their dashboard. */
+  'POST /api/requests/respond': async (req,res) => {
+    const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
+    const b = await body(req);
+    const r = db.prepare('SELECT * FROM tuition_requests WHERE gid=?').get(b.gid||'');
+    if (!r) return send(res,404,{error:'Request not found'});
+    if (r.teacher_id!==me.id) return send(res,403,{error:'Only the teacher of this request can answer it'});
+    if (r.status!=='Pending') return send(res,400,{error:'This request is no longer waiting for an answer'});
+    if (!['Accepted','Declined'].includes(b.response)) return send(res,400,{error:'response must be Accepted or Declined'});
+    if (b.response==='Declined') db.prepare("UPDATE tuition_requests SET teacher_response='Declined', status='Cancelled' WHERE gid=?").run(r.gid);
+    else db.prepare("UPDATE tuition_requests SET teacher_response='Accepted' WHERE gid=?").run(r.gid);
     send(res,200,{request: stripLink(db.prepare('SELECT * FROM tuition_requests WHERE gid=?').get(r.gid))});
   },
   /* Secure join: link returned only to this booking's own student/teacher,

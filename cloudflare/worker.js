@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS tuition_requests (
   amount_bdt REAL NOT NULL,
   available_time TEXT,
   pay_with TEXT DEFAULT 'money',
+  teacher_response TEXT DEFAULT 'Waiting',
   status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending','Confirm','Ongoing','Done','Cancelled')),
   class_link TEXT,
   class_start TEXT,
@@ -180,6 +181,10 @@ const MIGRATIONS = [
      already teachers — mark them ready (idempotent). */
   "UPDATE cv_details SET teacher_ready=1 WHERE teacher_ready=0 AND subjects IS NOT NULL AND subjects<>''",
   `CREATE TABLE IF NOT EXISTS password_resets (id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, email TEXT NOT NULL, done INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')))`,
+  "ALTER TABLE tuition_requests ADD COLUMN teacher_response TEXT DEFAULT 'Waiting'",
+  /* Classes already past the payment step were accepted under the old
+     flow — mark them accepted so they are never stuck (idempotent). */
+  "UPDATE tuition_requests SET teacher_response='Accepted' WHERE status IN ('Confirm','Ongoing','Done') AND (teacher_response IS NULL OR teacher_response='Waiting')",
 ];
 
 async function runMigrations(db) {
@@ -574,6 +579,8 @@ const routes = {
     if (!r) return send({ error: 'Request not found' }, 404);
     const next = b.status || 'Confirm';
     if (!['Confirm', 'Ongoing', 'Done'].includes(next)) return send({ error: 'status must be Confirm, Ongoing or Done' }, 400);
+    /* The cycle: teacher accepts first, then the student confirms payment. */
+    if (next === 'Confirm' && r.teacher_response !== 'Accepted') return send({ error: 'The teacher has not accepted this request yet' }, 400);
     await db.prepare('UPDATE tuition_requests SET status=? WHERE gid=?').bind(next, r.gid).run();
     if (next === 'Confirm') await db.prepare("UPDATE payments SET status='Confirm', escrow_status='Held' WHERE gid=?").bind(r.gid).run();
     if (next === 'Done') {
@@ -594,6 +601,27 @@ const routes = {
         await db.prepare("INSERT INTO time_entries(person_id,gid,topic,minutes,kind) VALUES(?,?,?,?,'earn')").bind(r.teacher_id, r.gid, r.topic, mins).run();
       }
       await db.prepare("UPDATE payments SET escrow_status='Released' WHERE gid=?").bind(r.gid).run();
+    }
+    const updated = await db.prepare('SELECT * FROM tuition_requests WHERE gid=?').bind(r.gid).first();
+    return send({ request: stripLink(updated) }, 200);
+  },
+
+  /* The teacher answers a request from their own dashboard ("Requests to
+     me"): Accept = willing to give the service, Decline = not willing
+     (the booking is cancelled). Only while the request is Pending. The
+     student sees the answer in their dashboard. */
+  'POST /api/requests/respond': async (request, db) => {
+    const me = await auth(request, db); if (!me) return send({ error: 'Sign in required' }, 401);
+    const b = await body(request);
+    const r = await db.prepare('SELECT * FROM tuition_requests WHERE gid=?').bind(b.gid || '').first();
+    if (!r) return send({ error: 'Request not found' }, 404);
+    if (r.teacher_id !== me.id) return send({ error: 'Only the teacher of this request can answer it' }, 403);
+    if (r.status !== 'Pending') return send({ error: 'This request is no longer waiting for an answer' }, 400);
+    if (!['Accepted', 'Declined'].includes(b.response)) return send({ error: 'response must be Accepted or Declined' }, 400);
+    if (b.response === 'Declined') {
+      await db.prepare("UPDATE tuition_requests SET teacher_response='Declined', status='Cancelled' WHERE gid=?").bind(r.gid).run();
+    } else {
+      await db.prepare("UPDATE tuition_requests SET teacher_response='Accepted' WHERE gid=?").bind(r.gid).run();
     }
     const updated = await db.prepare('SELECT * FROM tuition_requests WHERE gid=?').bind(r.gid).first();
     return send({ request: stripLink(updated) }, 200);

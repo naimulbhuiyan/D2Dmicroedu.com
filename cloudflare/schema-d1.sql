@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS tuition_requests (
   amount_bdt REAL NOT NULL,
   available_time TEXT,
   pay_with TEXT DEFAULT 'money',
+  teacher_response TEXT DEFAULT 'Waiting',
   status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending','Confirm','Ongoing','Done','Cancelled')),
   class_link TEXT,
   class_start TEXT,

@@ -160,6 +160,12 @@ on('signForm', 'onsubmit', async e => {
     const d = await api('/api/signin', { method: 'POST', body: JSON.stringify({ email: $('sEmail').value, password: $('sPass').value }) });
     saveToken(d.token); me = d.person; showProfile(d.person, d.cv);
     msg($('signMsg'), 'Welcome, ' + d.person.name);
+    /* Came from "I Need Help" without signing in? Continue to the form. */
+    if (sessionStorage.getItem('microedu_after_login') === 'help') {
+      sessionStorage.removeItem('microedu_after_login');
+      setTimeout(() => { location.href = 'help'; }, 500);
+      return;
+    }
     loadAll();
   } catch (err) { msg($('signMsg'), err.message, false); }
 });
@@ -356,7 +362,7 @@ async function sendRequests(ids) {
   if (!token) { msg($('bulkMsg'), 'Please register or sign in first — it takes one minute.', false); setTimeout(() => { location.href = 'register'; }, 900); return; }
   let sent = 0;
   for (const id of ids) { try { await api('/api/requests', { method: 'POST', body: JSON.stringify(helpPayload(id)) }); sent++; } catch (e) { /* skip a failed one */ } }
-  msg($('bulkMsg'), sent ? `✅ Request sent to ${sent} teacher(s). microedu will finalize it from both sides and organize your meeting.` : 'Could not send — please sign in and try again.', !!sent);
+  msg($('bulkMsg'), sent ? `✅ Request sent to ${sent} teacher(s). It is now in their dashboard — when a teacher accepts, you will see it in your dashboard and can confirm payment.` : 'Could not send — please sign in and try again.', !!sent);
   if (sent) loadMine();
 }
 window.sendToAll = () => sendRequests(suggestedIds);
@@ -413,13 +419,29 @@ async function loadMine() {
     const d = await api('/api/my-requests');
     const render = (r, mine) => {
       const btns = [];
-      if (r.status !== 'Done' && r.status !== 'Cancelled') btns.push(`<button class="btn btn-primary btn-sm" onclick="advance('${r.gid}','${r.status === 'Pending' ? 'Confirm' : r.status === 'Confirm' ? 'Ongoing' : 'Done'}')">${r.status === 'Pending' ? 'Confirm Payment' : r.status === 'Confirm' ? 'Start (Ongoing)' : 'Mark Done'}</button>`);
+      const resp = r.teacher_response || 'Waiting';
+      /* The teacher's answer to this request, shown to both sides. */
+      const respLine = r.status === 'Cancelled' && resp === 'Declined'
+        ? '<p><span class="escrow refunded">❌ The teacher declined this request</span></p>'
+        : resp === 'Accepted'
+          ? '<p><span class="escrow released">✅ Teacher accepted — willing to give this service</span></p>'
+          : r.status === 'Pending'
+            ? '<p><span class="escrow held">⏳ Waiting for the teacher to accept</span></p>'
+            : '';
+      if (mine === 'teacher' && r.status === 'Pending' && resp === 'Waiting') {
+        btns.push(`<button class="btn btn-primary btn-sm" onclick="respondReq('${r.gid}','Accepted')">✅ Accept — I will teach this</button>`);
+        btns.push(`<button class="btn btn-ghost btn-sm" onclick="respondReq('${r.gid}','Declined')">Decline</button>`);
+      }
+      /* Payment can only be confirmed after the teacher has accepted. */
+      if (r.status === 'Pending' && resp === 'Accepted') btns.push(`<button class="btn btn-primary btn-sm" onclick="advance('${r.gid}','Confirm')">Confirm Payment</button>`);
+      if (r.status === 'Confirm') btns.push(`<button class="btn btn-primary btn-sm" onclick="advance('${r.gid}','Ongoing')">Start (Ongoing)</button>`);
+      if (r.status === 'Ongoing') btns.push(`<button class="btn btn-primary btn-sm" onclick="advance('${r.gid}','Done')">Mark Done</button>`);
       if (['Confirm', 'Ongoing'].includes(r.status)) btns.push(`<button class="btn btn-orange btn-sm" onclick="joinClass('${r.gid}')">Join Class</button>`);
       if (['Confirm', 'Ongoing'].includes(r.status) && r.extension_status !== 'Requested') btns.push(`<button class="btn btn-ghost btn-sm" onclick="extendReq('${r.gid}')">Request +30 min</button>`);
       if (mine === 'student' && r.escrow_status === 'Held' && r.status !== 'Done') btns.push(`<button class="btn btn-ghost btn-sm" onclick="refundReq('${r.gid}')">Problem? Refund to me</button>`);
       const when = r.class_start ? `<br>🗓️ ${esc(new Date(r.class_start).toLocaleString())} · ${r.hours} hr` : (r.available_time ? `<br>🗓️ ${esc(r.available_time)}` : '');
       const ext = r.extension_status === 'Requested' ? '<p class="muted">⏳ Extension requested — waiting for microedu</p>' : r.extension_status === 'Approved' ? `<p class="muted">✅ Extra ${r.extension_minutes} min approved by microedu</p>` : '';
-      return `<div class="req-card"><p><b>GID: ${esc(r.gid)}</b> · ${esc(r.subject)} — ${esc(r.topic)}<br>${r.hours} hr × BDT ${r.rate_bdt_per_hour} = <b>BDT ${r.amount_bdt}</b>${when}</p>${tracker(r)}<p>${escrowLine(r)}</p>${ext}${btns.length ? `<p style="display:flex;gap:8px;flex-wrap:wrap">${btns.join('')}</p>` : ''}</div>`;
+      return `<div class="req-card"><p><b>GID: ${esc(r.gid)}</b> · ${esc(r.subject)} — ${esc(r.topic)}<br>${r.hours} hr × BDT ${r.rate_bdt_per_hour} = <b>BDT ${r.amount_bdt}</b>${when}</p>${tracker(r)}${respLine}<p>${escrowLine(r)}</p>${ext}${btns.length ? `<p style="display:flex;gap:8px;flex-wrap:wrap">${btns.join('')}</p>` : ''}</div>`;
     };
     setHtml('myRequests', d.asStudent.map(r => render(r, 'student')).join('') || '<p class="muted">None yet</p>');
     setHtml('teacherReqs', d.asTeacher.map(r => render(r, 'teacher')).join('') || '<p class="muted">None yet</p>');
@@ -430,6 +452,11 @@ window.joinClass = async gid => { try { const d = await api('/api/requests/join'
 window.extendReq = async gid => { try { await api('/api/requests/extend', { method: 'POST', body: JSON.stringify({ gid, minutes: 30 }) }); alert('Extension requested — microedu will approve it.'); loadMine(); } catch (e) { alert(e.message); } };
 window.refundReq = async gid => { if (!confirm('Refund this class in full? The booking will be cancelled.')) return; try { await api('/api/payments/refund', { method: 'POST', body: JSON.stringify({ gid }) }); loadMine(); } catch (e) { alert(e.message); } };
 window.advance = async (gid, status) => { try { await api('/api/payments/confirm', { method: 'POST', body: JSON.stringify({ gid, status }) }); loadMine(); } catch (e) { alert(e.message); } };
+/* Teacher answers a request from "Requests to me" in their dashboard. */
+window.respondReq = async (gid, response) => {
+  if (response === 'Declined' && !confirm('Decline this request? The booking will be cancelled and the student will see that you declined.')) return;
+  try { await api('/api/requests/respond', { method: 'POST', body: JSON.stringify({ gid, response }) }); loadMine(); } catch (e) { alert(e.message); }
+};
 
 /* ---------- time bank ---------- */
 async function loadTimebank() {
@@ -474,6 +501,13 @@ async function restoreSession() {
   try { const d = await api('/api/me'); me = d.person; showProfile(d.person, d.cv); } catch (e) { /* stale token */ }
 }
 function loadAll() { loadTeachers(); loadPeople(); loadMine(); restoreSession(); }
+/* "I Need Help" needs an identified member: without sign-in there is no
+   way to know who is asking, so the help page sends the visitor to the
+   sign-in page first and brings them back here after signing in. */
+if ($('suggestBtn') && !token) {
+  sessionStorage.setItem('microedu_after_login', 'help');
+  location.replace('dashboard');
+}
 loadAll();
 if (location.hash === '#teacher') setTimeout(() => window.goTeach(), 450);
 
