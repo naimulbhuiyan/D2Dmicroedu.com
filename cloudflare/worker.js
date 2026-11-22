@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS tuition_requests (
   available_time TEXT,
   pay_with TEXT DEFAULT 'money',
   teacher_response TEXT DEFAULT 'Waiting',
+  on_hold_until TEXT,
   status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending','Confirm','Ongoing','Done','Cancelled')),
   class_link TEXT,
   class_start TEXT,
@@ -183,6 +184,7 @@ const MIGRATIONS = [
   "UPDATE cv_details SET teacher_ready=1 WHERE teacher_ready=0 AND subjects IS NOT NULL AND subjects<>''",
   `CREATE TABLE IF NOT EXISTS password_resets (id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, email TEXT NOT NULL, done INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')))`,
   "ALTER TABLE tuition_requests ADD COLUMN teacher_response TEXT DEFAULT 'Waiting'",
+  'ALTER TABLE tuition_requests ADD COLUMN on_hold_until TEXT',
   'ALTER TABLE payments ADD COLUMN trxid TEXT',
   'ALTER TABLE payments ADD COLUMN sender TEXT',
   'ALTER TABLE payments ADD COLUMN verified INTEGER DEFAULT 0',
@@ -301,6 +303,29 @@ async function cvOf(db, id) {
 /* The class link is never sent in list/detail responses — it is handed out
    only by POST /api/requests/join, inside the booked time window. */
 const stripLink = r => r && ({ ...r, class_link: null });
+
+/* One teacher per help need: when a student commits to one teacher for a
+   subject+topic (pays, or confirms a free/time class), the student's other
+   Pending requests for that same need go INACTIVE for one day (on hold) —
+   not cancelled. If the chosen teacher does not work out and the student
+   raises an issue (refund), the hold is cleared at once and the student can
+   take help from one of the others instead. */
+async function holdSiblings(db, r) {
+  const until = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+  await db.prepare("UPDATE tuition_requests SET on_hold_until=? WHERE student_id=? AND subject=? AND topic=? AND gid<>? AND status='Pending'")
+    .bind(until, r.student_id, r.subject, r.topic, r.gid).run();
+}
+async function clearSiblingHolds(db, r) {
+  await db.prepare("UPDATE tuition_requests SET on_hold_until=NULL WHERE student_id=? AND subject=? AND topic=? AND gid<>? AND status='Pending'")
+    .bind(r.student_id, r.subject, r.topic, r.gid).run();
+}
+const onHold = r => !!(r.on_hold_until && new Date(r.on_hold_until).getTime() > Date.now());
+/* Once the chosen class is Done — the service was properly received — the
+   other teachers' requests for that same help are removed for good. */
+async function deleteSiblingsFinal(db, r) {
+  await db.prepare("DELETE FROM tuition_requests WHERE student_id=? AND subject=? AND topic=? AND gid<>? AND status='Pending'")
+    .bind(r.student_id, r.subject, r.topic, r.gid).run();
+}
 
 /* Join window: opens 15 minutes before the booked start, closes at
    start + booked hours + 30 minutes grace (+ approved extension minutes).
@@ -590,6 +615,9 @@ const routes = {
     const trxid = String(b.trxid || '').trim().toUpperCase();
     if (trxid.length < 6) return send({ error: 'Please enter the bKash transaction ID (TrxID)' }, 400);
     await db.prepare('UPDATE payments SET trxid=?, sender=?, rejected=0 WHERE gid=?').bind(trxid, String(b.sender || '').trim() || null, r.gid).run();
+    /* Paying for this teacher = choosing them: the other teachers for the
+       same help go inactive (on hold) for one day. */
+    await holdSiblings(db, r);
     return send({ ok: true }, 200);
   },
 
@@ -609,6 +637,7 @@ const routes = {
     if (b.ok) {
       await db.prepare("UPDATE payments SET verified=1, status='Confirm', escrow_status='Held' WHERE gid=?").bind(r.gid).run();
       await db.prepare("UPDATE tuition_requests SET status='Confirm' WHERE gid=? AND status='Pending'").bind(r.gid).run();
+      await holdSiblings(db, r);
     } else {
       await db.prepare('UPDATE payments SET rejected=1, trxid=NULL, sender=NULL WHERE gid=?').bind(r.gid).run();
     }
@@ -629,7 +658,7 @@ const routes = {
        payment. Free classes and time-bank classes still confirm here. */
     if (next === 'Confirm' && r.pay_with !== 'time' && Number(r.amount_bdt) > 0) return send({ error: 'Pay by bKash first — microedu will verify your payment and confirm the class.' }, 400);
     await db.prepare('UPDATE tuition_requests SET status=? WHERE gid=?').bind(next, r.gid).run();
-    if (next === 'Confirm') await db.prepare("UPDATE payments SET status='Confirm', escrow_status='Held' WHERE gid=?").bind(r.gid).run();
+    if (next === 'Confirm') { await db.prepare("UPDATE payments SET status='Confirm', escrow_status='Held' WHERE gid=?").bind(r.gid).run(); await holdSiblings(db, r); }
     if (next === 'Done') {
       const mins = Math.round((Number(r.hours) || 1) * 60);
       const timeExists = await db.prepare("SELECT 1 AS x FROM time_entries WHERE gid=? AND kind='earn'").bind(r.gid).first();
@@ -648,6 +677,9 @@ const routes = {
         await db.prepare("INSERT INTO time_entries(person_id,gid,topic,minutes,kind) VALUES(?,?,?,?,'earn')").bind(r.teacher_id, r.gid, r.topic, mins).run();
       }
       await db.prepare("UPDATE payments SET escrow_status='Released' WHERE gid=?").bind(r.gid).run();
+      /* Service properly received: the other teachers for this help are
+         removed for good. */
+      await deleteSiblingsFinal(db, r);
     }
     const updated = await db.prepare('SELECT * FROM tuition_requests WHERE gid=?').bind(r.gid).first();
     return send({ request: stripLink(updated) }, 200);
@@ -664,6 +696,7 @@ const routes = {
     if (!r) return send({ error: 'Request not found' }, 404);
     if (r.teacher_id !== me.id) return send({ error: 'Only the teacher of this request can answer it' }, 403);
     if (r.status !== 'Pending') return send({ error: 'This request is no longer waiting for an answer' }, 400);
+    if (onHold(r)) return send({ error: 'This request is on hold for a day — the student is trying another teacher for this help first' }, 400);
     if (!['Accepted', 'Declined'].includes(b.response)) return send({ error: 'response must be Accepted or Declined' }, 400);
     if (b.response === 'Declined') {
       await db.prepare("UPDATE tuition_requests SET teacher_response='Declined', status='Cancelled' WHERE gid=?").bind(r.gid).run();
@@ -739,6 +772,9 @@ const routes = {
     if (!pay || pay.escrow_status !== 'Held') return send({ error: 'Only money held with microedu can be refunded' }, 400);
     await db.prepare("UPDATE payments SET escrow_status='Refunded' WHERE gid=?").bind(r.gid).run();
     await db.prepare("UPDATE tuition_requests SET status='Cancelled' WHERE gid=?").bind(r.gid).run();
+    /* Issue raised against the chosen teacher: the other teachers for this
+       help become active again immediately. */
+    await clearSiblingHolds(db, r);
     const updated = await db.prepare('SELECT * FROM tuition_requests WHERE gid=?').bind(r.gid).first();
     return send({ request: stripLink(updated), refunded: true }, 200);
   },

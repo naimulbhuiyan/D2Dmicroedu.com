@@ -17,7 +17,7 @@ CREATE INDEX IF NOT EXISTS idx_people_role ON registered_people(role);
 CREATE TABLE IF NOT EXISTS cv_details(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL UNIQUE REFERENCES registered_people(id) ON DELETE CASCADE, education TEXT NOT NULL, university TEXT NOT NULL, profession TEXT NOT NULL, position TEXT, experience TEXT NOT NULL, speciality TEXT NOT NULL, subjects TEXT NOT NULL, level TEXT NOT NULL, address TEXT NOT NULL, available_time TEXT, rate_bdt_per_hour REAL NOT NULL DEFAULT 500, pricing_type TEXT DEFAULT 'hourly', expertise_time TEXT, teacher_ready INTEGER DEFAULT 0, accepts_time_exchange INTEGER DEFAULT 0, cv_file_name TEXT);
 CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, person_id INTEGER NOT NULL REFERENCES registered_people(id) ON DELETE CASCADE, created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS subscriptions(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL REFERENCES registered_people(id) ON DELETE CASCADE, plan TEXT NOT NULL, months INTEGER NOT NULL, amount_bdt REAL NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'Pending', created_at TEXT DEFAULT (datetime('now')));
-CREATE TABLE IF NOT EXISTS tuition_requests(id INTEGER PRIMARY KEY AUTOINCREMENT, gid TEXT NOT NULL UNIQUE, student_id INTEGER NOT NULL REFERENCES registered_people(id), teacher_id INTEGER NOT NULL REFERENCES registered_people(id), level TEXT, subject TEXT NOT NULL, chapter TEXT, topic TEXT NOT NULL, hours REAL NOT NULL DEFAULT 1, rate_bdt_per_hour REAL NOT NULL DEFAULT 500, amount_bdt REAL NOT NULL, available_time TEXT, pay_with TEXT DEFAULT 'money', teacher_response TEXT DEFAULT 'Waiting', status TEXT NOT NULL DEFAULT 'Pending', class_link TEXT, class_start TEXT, extension_minutes INTEGER DEFAULT 0, extension_status TEXT DEFAULT 'None', created_at TEXT DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS tuition_requests(id INTEGER PRIMARY KEY AUTOINCREMENT, gid TEXT NOT NULL UNIQUE, student_id INTEGER NOT NULL REFERENCES registered_people(id), teacher_id INTEGER NOT NULL REFERENCES registered_people(id), level TEXT, subject TEXT NOT NULL, chapter TEXT, topic TEXT NOT NULL, hours REAL NOT NULL DEFAULT 1, rate_bdt_per_hour REAL NOT NULL DEFAULT 500, amount_bdt REAL NOT NULL, available_time TEXT, pay_with TEXT DEFAULT 'money', teacher_response TEXT DEFAULT 'Waiting', on_hold_until TEXT, status TEXT NOT NULL DEFAULT 'Pending', class_link TEXT, class_start TEXT, extension_minutes INTEGER DEFAULT 0, extension_status TEXT DEFAULT 'None', created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS time_entries(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, gid TEXT, topic TEXT, minutes INTEGER NOT NULL, kind TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS password_resets(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, email TEXT NOT NULL, done INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS payments(id INTEGER PRIMARY KEY AUTOINCREMENT, gid TEXT NOT NULL, person_id INTEGER NOT NULL, amount_bdt REAL NOT NULL, method TEXT DEFAULT 'bKash', status TEXT NOT NULL DEFAULT 'Pending', escrow_status TEXT DEFAULT 'Awaiting payment', trxid TEXT, sender TEXT, verified INTEGER DEFAULT 0, rejected INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')));
@@ -48,6 +48,7 @@ for (const sql of [
   "UPDATE cv_details SET teacher_ready=1 WHERE teacher_ready=0 AND subjects IS NOT NULL AND subjects<>''",
   "CREATE TABLE IF NOT EXISTS password_resets(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, email TEXT NOT NULL, done INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')))",
   "ALTER TABLE tuition_requests ADD COLUMN teacher_response TEXT DEFAULT 'Waiting'",
+  'ALTER TABLE tuition_requests ADD COLUMN on_hold_until TEXT',
   "UPDATE tuition_requests SET teacher_response='Accepted' WHERE status IN ('Confirm','Ongoing','Done') AND (teacher_response IS NULL OR teacher_response='Waiting')",
 ]) { try { db.exec(sql); } catch { /* column already exists */ } }
 
@@ -68,6 +69,26 @@ const cvOf = id => db.prepare('SELECT * FROM cv_details WHERE person_id=?').get(
 /* The class link is never sent in list/detail responses — it is handed out
    only by POST /api/requests/join, inside the booked time window. */
 const stripLink = r => r && ({...r, class_link:null});
+
+/* One teacher per help need: committing to one teacher puts the student's
+   other Pending requests for the same subject+topic on hold for one day —
+   inactive, not cancelled. A refund (issue raised) clears the hold at once. */
+function holdSiblings(r) {
+  const until = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+  db.prepare("UPDATE tuition_requests SET on_hold_until=? WHERE student_id=? AND subject=? AND topic=? AND gid<>? AND status='Pending'")
+    .run(until, r.student_id, r.subject, r.topic, r.gid);
+}
+function clearSiblingHolds(r) {
+  db.prepare("UPDATE tuition_requests SET on_hold_until=NULL WHERE student_id=? AND subject=? AND topic=? AND gid<>? AND status='Pending'")
+    .run(r.student_id, r.subject, r.topic, r.gid);
+}
+const onHold = r => !!(r.on_hold_until && new Date(r.on_hold_until).getTime() > Date.now());
+/* Once the chosen class is Done, the other teachers for that help are
+   removed for good. */
+function deleteSiblingsFinal(r) {
+  db.prepare("DELETE FROM tuition_requests WHERE student_id=? AND subject=? AND topic=? AND gid<>? AND status='Pending'")
+    .run(r.student_id, r.subject, r.topic, r.gid);
+}
 /* Join window: opens 15 min before the booked start, closes at start +
    booked hours + 30 min grace (+ approved extension). No class_start = no check. */
 function joinWindow(r) {
@@ -275,6 +296,8 @@ const routes = {
     const trxid = String(b.trxid||'').trim().toUpperCase();
     if (trxid.length<6) return send(res,400,{error:'Please enter the bKash transaction ID (TrxID)'});
     db.prepare('UPDATE payments SET trxid=?, sender=?, rejected=0 WHERE gid=?').run(trxid, String(b.sender||'').trim()||null, r.gid);
+    /* Choosing this teacher: siblings for the same help go on hold a day. */
+    holdSiblings(r);
     send(res,200,{ok:true});
   },
   'GET /api/payments/to-verify': (req,res) => {
@@ -292,6 +315,7 @@ const routes = {
     if (b.ok) {
       db.prepare("UPDATE payments SET verified=1, status='Confirm', escrow_status='Held' WHERE gid=?").run(r.gid);
       db.prepare("UPDATE tuition_requests SET status='Confirm' WHERE gid=? AND status='Pending'").run(r.gid);
+      holdSiblings(r);
     } else {
       db.prepare('UPDATE payments SET rejected=1, trxid=NULL, sender=NULL WHERE gid=?').run(r.gid);
     }
@@ -309,7 +333,7 @@ const routes = {
     /* Money classes confirm only through bKash TrxID verification. */
     if (next==='Confirm' && r.pay_with!=='time' && Number(r.amount_bdt)>0) return send(res,400,{error:'Pay by bKash first — microedu will verify your payment and confirm the class.'});
     db.prepare('UPDATE tuition_requests SET status=? WHERE gid=?').run(next,r.gid);
-    if (next==='Confirm') db.prepare("UPDATE payments SET status='Confirm', escrow_status='Held' WHERE gid=?").run(r.gid);
+    if (next==='Confirm') { db.prepare("UPDATE payments SET status='Confirm', escrow_status='Held' WHERE gid=?").run(r.gid); holdSiblings(r); }
     if (next==='Done') {
       const mins = Math.round((Number(r.hours)||1)*60);
       const timeExists = db.prepare("SELECT 1 FROM time_entries WHERE gid=? AND kind='earn'").get(r.gid);
@@ -327,6 +351,8 @@ const routes = {
         db.prepare("INSERT INTO time_entries(person_id,gid,topic,minutes,kind) VALUES(?,?,?,?,'earn')").run(r.teacher_id,r.gid,r.topic,mins);
       }
       db.prepare("UPDATE payments SET escrow_status='Released' WHERE gid=?").run(r.gid);
+      /* Service properly received: siblings for this help are removed. */
+      deleteSiblingsFinal(r);
     }
     send(res,200,{request: stripLink(db.prepare('SELECT * FROM tuition_requests WHERE gid=?').get(r.gid))});
   },
@@ -340,6 +366,7 @@ const routes = {
     if (!r) return send(res,404,{error:'Request not found'});
     if (r.teacher_id!==me.id) return send(res,403,{error:'Only the teacher of this request can answer it'});
     if (r.status!=='Pending') return send(res,400,{error:'This request is no longer waiting for an answer'});
+    if (onHold(r)) return send(res,400,{error:'This request is on hold for a day — the student is trying another teacher for this help first'});
     if (!['Accepted','Declined'].includes(b.response)) return send(res,400,{error:'response must be Accepted or Declined'});
     if (b.response==='Declined') db.prepare("UPDATE tuition_requests SET teacher_response='Declined', status='Cancelled' WHERE gid=?").run(r.gid);
     else db.prepare("UPDATE tuition_requests SET teacher_response='Accepted' WHERE gid=?").run(r.gid);
@@ -401,6 +428,8 @@ const routes = {
     if (!pay || pay.escrow_status!=='Held') return send(res,400,{error:'Only money held with microedu can be refunded'});
     db.prepare("UPDATE payments SET escrow_status='Refunded' WHERE gid=?").run(r.gid);
     db.prepare("UPDATE tuition_requests SET status='Cancelled' WHERE gid=?").run(r.gid);
+    /* Issue raised: the other teachers for this help reactivate at once. */
+    clearSiblingHolds(r);
     send(res,200,{request: stripLink(db.prepare('SELECT * FROM tuition_requests WHERE gid=?').get(r.gid)), refunded:true});
   },
   'GET /api/wallet': (req,res) => {

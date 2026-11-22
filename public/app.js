@@ -440,6 +440,11 @@ async function loadMine() {
     const render = (r, mine) => {
       const btns = [];
       const resp = r.teacher_response || 'Waiting';
+      /* On hold: the student chose another teacher for this same help;
+         these stay inactive for a day, then open again. */
+      const held = !!(r.on_hold_until && new Date(r.on_hold_until) > new Date());
+      const holdLine = held && r.status === 'Pending'
+        ? '<p><span class="escrow held">⏸ On hold for a day — the student is trying another teacher for this help first. It opens again if that does not work out.</span></p>' : '';
       /* The teacher's answer to this request, shown to both sides. */
       const respLine = r.status === 'Cancelled' && resp === 'Declined'
         ? '<p><span class="escrow refunded">❌ The teacher declined this request</span></p>'
@@ -448,7 +453,7 @@ async function loadMine() {
           : r.status === 'Pending'
             ? '<p><span class="escrow held">⏳ Waiting for the teacher to accept</span></p>'
             : '';
-      if (mine === 'teacher' && r.status === 'Pending' && resp === 'Waiting') {
+      if (mine === 'teacher' && r.status === 'Pending' && resp === 'Waiting' && !held) {
         btns.push(`<button class="btn btn-primary btn-sm" onclick="respondReq('${r.gid}','Accepted')">✅ Accept — I will teach this</button>`);
         btns.push(`<button class="btn btn-ghost btn-sm" onclick="respondReq('${r.gid}','Declined')">Decline</button>`);
       }
@@ -478,9 +483,9 @@ async function loadMine() {
       const sent = r.created_at ? `<br>🕐 Sent: ${esc(fmtWhen(r.created_at))}` : '';
       const when = (r.class_start ? `<br>🗓️ Class: ${esc(new Date(r.class_start).toLocaleString())} · <b>${esc(timeUntil(r.class_start))}</b>` : '') + (r.available_time ? `<br>🕒 Available: ${esc(r.available_time)}` : '');
       const ext = r.extension_status === 'Requested' ? '<p class="muted">⏳ Extension requested — waiting for microedu</p>' : r.extension_status === 'Approved' ? `<p class="muted">✅ Extra ${r.extension_minutes} min approved by microedu</p>` : '';
-      return `<div class="req-card"><p><b>GID: ${esc(r.gid)}</b> · ${esc(r.subject)} — ${esc(r.topic)}${details ? `<br>${details}` : ''}<br>${r.hours} hr × BDT ${r.rate_bdt_per_hour} = <b>BDT ${r.amount_bdt}</b>${who}${sent}${when}</p>${tracker(r)}${respLine}<p>${escrowLine(r)}</p>${ext}${payBox}${btns.length ? `<p style="display:flex;gap:8px;flex-wrap:wrap">${btns.join('')}</p>` : ''}</div>`;
+      return `<div class="req-card"><p><b>GID: ${esc(r.gid)}</b> · ${esc(r.subject)} — ${esc(r.topic)}${details ? `<br>${details}` : ''}<br>${r.hours} hr × BDT ${r.rate_bdt_per_hour} = <b>BDT ${r.amount_bdt}</b>${who}${sent}${when}</p>${tracker(r)}${respLine}${holdLine}<p>${escrowLine(r)}</p>${ext}${payBox}${btns.length ? `<p style="display:flex;gap:8px;flex-wrap:wrap">${btns.join('')}</p>` : ''}</div>`;
     };
-    setHtml('myRequests', d.asStudent.map(r => render(r, 'student')).join('') || '<p class="muted">None yet</p>');
+    setHtml('myRequests', d.asStudent.filter(r => !(r.status === 'Pending' && r.on_hold_until && new Date(r.on_hold_until) > new Date())).map(r => render(r, 'student')).join('') || '<p class="muted">None yet</p>');
     setHtml('teacherReqs', d.asTeacher.map(r => render(r, 'teacher')).join('') || '<p class="muted">None yet</p>');
     renderNotifications(d);
     loadWallet();
@@ -493,7 +498,7 @@ function renderNotifications(d) {
   const el = $('notifList'); const card = $('notifCard'); if (!el || !card) return;
   const items = [];
   for (const r of d.asTeacher) {
-    if (r.status === 'Pending' && (r.teacher_response || 'Waiting') === 'Waiting') {
+    if (r.status === 'Pending' && (r.teacher_response || 'Waiting') === 'Waiting' && !(r.on_hold_until && new Date(r.on_hold_until) > new Date())) {
       items.push(`<div class="notif-item"><p>📩 <b>New request</b> from <b>${esc(r.student_name || 'a student')}</b> — ${esc(r.subject)} · ${esc(r.topic)}<br>🕐 Sent: ${esc(fmtWhen(r.created_at))}${r.class_start ? `<br>🗓️ Class: ${esc(new Date(r.class_start).toLocaleString())} · <b>${esc(timeUntil(r.class_start))}</b>` : ''}${r.available_time ? `<br>🕒 Available: ${esc(r.available_time)}` : ''}</p><p style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="respondReq('${r.gid}','Accepted')">✅ Accept — I will teach this</button><button class="btn btn-ghost btn-sm" onclick="respondReq('${r.gid}','Declined')">Decline</button></p></div>`);
     }
   }
