@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Branches — microedu.com | School, College, University</title>
+<meta name="description" content="microedu.com — Micro Edu. Support. Get live 1-to-1 online tuition help on any part of any subject, from verified teachers in Bangladesh. Pay in advance by bKash, full refund if there is a problem.">
+<link rel="icon" type="image/svg+xml" href="/logo.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<div class="announce" data-i18n-html="announce">Pay in advance by <b>bKash</b> &nbsp;·&nbsp; Full refund if there is a problem &nbsp;·&nbsp; Help on any part of any subject, at any time</div>
+
+<header class="topbar">
+  <div class="wrap topbar-in">
+    <a class="brand" href="/" aria-label="microedu.com home">
+      <img src="/logo.svg" alt="" class="brand-mark">
+      <span class="brand-name">micro<span class="b-teal">edu</span><span class="b-orange">.com</span></span>
+    </a>
+    <nav class="nav">
+      <a href="help" data-i18n="navHelp">I Need Help</a>
+      <a href="branches" data-i18n="navBranches">Branches</a>
+      <a href="plans" data-i18n="navSub">Subscription</a>
+    </nav>
+    <div class="top-actions">
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button type="button" id="langEn" class="sel">EN</button>
+        <button type="button" id="langBn">বাংলা</button>
+      </div>
+      <a class="btn btn-ghost" href="dashboard" data-i18n="signInBtn">Sign In</a>
+      <a class="btn btn-primary" href="register" data-i18n="joinFree">Join Free</a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- BRANCHES: School / College / University, built from the teachers
+     themselves. Only subjects that really have teachers appear, and only
+     as many teachers as there are — no counts, no empty branches. -->
+  <section class="section grey">
+    <div class="wrap">
+      <p class="eyebrow center" data-i18n="brEyebrow">— Branches</p>
+      <h2 class="center" data-i18n-html="brTitle">Find help by <span class="u-line">branch</span>.</h2>
+      <p class="sub center" data-i18n="brSub">School, College or University — pick a subject and see the teachers who can help you with it. Tap a subject to ask for help, or tap a teacher's name to ask that teacher.</p>
+
+      <div class="card hidden" id="phCard" style="border:2px solid #ffb020;background:#fffaf0">
+        <h3 data-i18n="brPH">⭐ Public Health — our special branch</h3>
+        <p class="muted" data-i18n="brPHSub">Public Health experts and teachers, specially marked.</p>
+        <div id="phList"></div>
+      </div>
+
+      <div id="branchRoot"><p class="muted center">Loading branches…</p></div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <div class="foot-col">
+      <a class="brand light" href="/"><img src="/logo.svg" alt="" class="brand-mark"><span class="brand-name">micro<span class="b-teal">edu</span><span class="b-orange">.com</span></span></a>
+      <p data-i18n="footAbout">Micro Edu. Support — direct online tuition support on any part of any subject, at any time, from verified teachers across Bangladesh.</p>
+    </div>
+    <div class="foot-col">
+      <h4 data-i18n="footExplore">Explore</h4>
+      <a href="/#how" data-i18n="navHow">How it works</a>
+      <a href="plans" data-i18n="navSub">Subscription</a>
+      <a href="register" data-i18n="regLink">Registration</a>
+      <a href="teachers#people" data-i18n="navPeople">Registered People</a>
+    </div>
+    <div class="foot-col">
+      <h4 data-i18n="footKnow">Good to know</h4>
+      <p data-i18n="know1">💳 Payment in advance by bKash</p>
+      <p data-i18n="know2">🛡️ Full refund if there is a problem</p>
+      <p data-i18n="know3">📍 Dhaka, Bangladesh</p>
+      <p data-i18n="know4">🕒 Support at your available time</p>
+    </div>
+  </div>
+  <div class="foot-bar wrap"><span data-i18n="footCopy">© 2026 microedu.com — Micro Edu. Support</span><span data-i18n="footTag">Learn and teach from the same account</span></div>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>

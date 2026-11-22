@@ -355,6 +355,99 @@ async function loadTeachers() {
     window.allTeachers = d.teachers;
   } catch (e) { /* search stays empty */ }
 }
+/* ---------- Branches: School / College / University ----------
+   Placement is automatic, from each teacher's own CV (agreed rules):
+   - Masters completed -> School + College + University, subject-wise
+   - Honours completed -> School (Class 6-10), subject-wise
+   - Honours students -> University, as peer teachers in their subject
+   - Professionals & others -> University, by subject + expertise
+   Only subjects that really have teachers appear, and only the teachers
+   themselves are shown by name — no counts, no empty subjects. */
+const BRANCH_DEFS = [
+  { key: 'School', icon: '🏫', label: 'School', sub: 'Class 6–10 · SSC', level: 'School (Class 6-10)' },
+  { key: 'College', icon: '🎓', label: 'College', sub: 'Class 11–12 · HSC', level: 'College (Class 11-12)' },
+  { key: 'University', icon: '🏛️', label: 'University', sub: 'Honours · Masters · Professionals', level: 'University' },
+];
+function teacherBranches(cv) {
+  if (!cv) return [];
+  const edu = (cv.education || '').toLowerCase();
+  const prof = (cv.profession || '').toLowerCase();
+  const out = new Set();
+  const masters = /master|msc|m\.sc|mph|mba|m\.phil|ph\.?d|doctor/.test(edu);
+  const honours = /honou?rs|bachelor|bsc|b\.sc|bba|mbbs/.test(edu);
+  const running = /running|studying|student|pursuing|ongoing|semester/.test(edu + ' ' + prof);
+  if (masters) { out.add('School'); out.add('College'); out.add('University'); }
+  else if (honours && !running) out.add('School');
+  else if (honours && running) out.add('University');
+  if (cv.speciality && prof && !/student/.test(prof)) out.add('University');
+  if (!out.size && (cv.subjects || cv.speciality)) out.add('University');
+  return [...out];
+}
+function subjectTokens(cv) {
+  const raw = (cv && (cv.subjects || cv.speciality)) || '';
+  const seen = new Map();
+  for (const t of raw.split(/[,+/&·|]/)) {
+    const s = t.trim().replace(/\s+/g, ' ');
+    if (s.length >= 2 && s.length <= 40) { const k = s.toLowerCase(); if (!seen.has(k)) seen.set(k, s); }
+  }
+  return [...seen.values()];
+}
+const isPublicHealth = cv => /public health|epidemiolog|biostatistic|\bmph\b|community health/.test((((cv || {}).subjects || '') + ' ' + ((cv || {}).speciality || '') + ' ' + ((cv || {}).education || '')).toLowerCase());
+function teacherChip(t, levelLabel) {
+  const name = displayName(t);
+  const anon = t.anonymous || t.photo_mode === 'anonymous';
+  const firstSubject = (subjectTokens(t.cv || {})[0] || '');
+  const href = anon ? `help?level=${encodeURIComponent(levelLabel)}&subject=${encodeURIComponent(firstSubject)}` : `help?teacher=${encodeURIComponent(name)}`;
+  return `<a class="tchip" href="${href}">${avatarHtml(t)}<span>${esc(name)}</span></a>`;
+}
+async function loadBranches() {
+  const root = $('branchRoot'); if (!root) return;
+  try {
+    const d = await api('/api/teachers');
+    const teachers = d.teachers || [];
+    const ph = teachers.filter(t => isPublicHealth(t.cv));
+    if (ph.length) { $('phCard').classList.remove('hidden'); $('phList').innerHTML = `<div class="tchips">${ph.map(t => teacherChip(t, 'University')).join('')}</div>`; }
+    let html = '';
+    for (const b of BRANCH_DEFS) {
+      const groups = new Map();
+      for (const t of teachers) {
+        if (!teacherBranches(t.cv).includes(b.key)) continue;
+        for (const s of subjectTokens(t.cv)) {
+          const k = s.toLowerCase();
+          if (!groups.has(k)) groups.set(k, { label: s, teachers: [] });
+          groups.get(k).teachers.push(t);
+        }
+      }
+      if (!groups.size) continue;
+      const gs = [...groups.values()].sort((a, b2) => a.label.localeCompare(b2.label));
+      html += `<div class="card branch-sec"><h3>${b.icon} ${b.label} <small class="muted">${b.sub}</small></h3>` +
+        gs.map(g => `<div class="subj-group"><a class="subj-head" href="help?level=${encodeURIComponent(b.level)}&subject=${encodeURIComponent(g.label)}">${esc(g.label)} →</a><div class="tchips">${g.teachers.map(t => teacherChip(t, b.level)).join('')}</div></div>`).join('') + '</div>';
+    }
+    root.innerHTML = html || '<p class="muted center">No teachers yet — branches appear as teachers join.</p>';
+  } catch (e) { root.innerHTML = '<p class="muted center">Could not load branches.</p>'; }
+}
+/* Arriving from a branch: the help form comes pre-filled (level + subject,
+   or the teacher's name in the search box) and suggestions run at once. */
+let helpParamsDone = false;
+function initHelpParams() {
+  if (helpParamsDone || !$('qLevel')) return;
+  helpParamsDone = true;
+  const q = new URLSearchParams(location.search);
+  const level = q.get('level'), subject = q.get('subject'), teacher = q.get('teacher');
+  if (level) $('qLevel').value = level;
+  if (subject) {
+    $('qSubject').value = subject; $('qChapter').value = ''; $('qTopic').value = '';
+    setTimeout(() => { const b = $('suggestBtn'); if (b) b.click(); }, 400);
+  }
+  if (teacher) {
+    const ts = $('tSearch');
+    if (ts) {
+      ts.value = teacher;
+      const iv = setInterval(() => { if (window.allTeachers) { clearInterval(iv); ts.dispatchEvent(new Event('input')); ts.scrollIntoView({ behavior: 'smooth', block: 'center' }); } }, 250);
+      setTimeout(() => clearInterval(iv), 6000);
+    }
+  }
+}
 on('suggestBtn', 'onclick', async () => {
   const btn = $('suggestBtn'); const old = btn.textContent;
   btn.disabled = true; btn.textContent = '⏳ Finding your teachers…';
@@ -636,7 +729,7 @@ async function updateHeaderUser() {
     } catch (e) { /* bell stays without a badge */ }
   } catch (e) { /* stale token: leave the default bar */ }
 }
-function loadAll() { loadTeachers(); loadPeople(); loadMine(); restoreSession(); updateHeaderUser(); }
+function loadAll() { loadTeachers(); loadPeople(); loadMine(); restoreSession(); updateHeaderUser(); loadBranches(); initHelpParams(); }
 /* "I Need Help" needs an identified member: without sign-in there is no
    way to know who is asking, so the help page sends the visitor to the
    sign-in page first and brings them back here after signing in. */
@@ -744,6 +837,9 @@ const BN = {
   lblCurPass: 'বর্তমান পাসওয়ার্ড', lblNewPass: 'নতুন পাসওয়ার্ড', lblNewPass2: 'নতুন পাসওয়ার্ড আবার',
   saveDetailsBtn: 'আমার তথ্য সেভ করুন', changePassBtn: 'পাসওয়ার্ড বদলান',
   phYourPass: 'আপনার পাসওয়ার্ড', signOutBtn: 'সাইন আউট', myProfile: 'আমার প্রোফাইল', notifTitle: '🔔 নোটিফিকেশন',
+  navBranches: 'ব্রাঞ্চসমূহ', brEyebrow: '— ব্রাঞ্চ', brTitle: 'ব্রাঞ্চ অনুযায়ী <span class="u-line">সাহায্য</span> খুঁজুন।',
+  brSub: 'স্কুল, কলেজ বা বিশ্ববিদ্যালয় — বিষয় বেছে নিন আর দেখুন কোন শিক্ষকরা ওই বিষয়ে সাহায্য করতে পারবেন। বিষয়ে চাপ দিলে সাহায্যের ফর্ম তৈরি হয়ে যাবে, শিক্ষকের নামে চাপ দিলে সরাসরি ওই শিক্ষককেই চাওয়া যাবে।',
+  brPH: '⭐ পাবলিক হেলথ — আমাদের বিশেষ ব্রাঞ্চ', brPHSub: 'পাবলিক হেলথ বিশেষজ্ঞ ও শিক্ষক, বিশেষভাবে চিহ্নিত।',
   anonTitle: '🕶️ অজ্ঞাত মোড', anonLabel: 'সবার কাছ থেকে আমার নাম, ছবি ও ফোন নম্বর লুকিয়ে রাখুন',
   anonHint: 'এটা চালু থাকলে অন্য সদস্যরা আপনাকে শুধু “Anonymous” হিসেবেই দেখবে — কিন্তু আপনার শিক্ষাগত যোগ্যতা দেখা যাবে, তাই পরিচয় না দিয়েই আপনি যে কাউকে পড়াতে বা যে কারো কাছ থেকে সাহায্য নিতে পারবেন। microedu আপনার তথ্য দেখতে পারবে।',
   walletTitle: 'আমার ওয়ালেট', forTeachers: '(শিক্ষকদের জন্য)', lblBalance: 'ব্যালেন্স:',
