@@ -483,7 +483,7 @@ async function loadMine() {
       const sent = r.created_at ? `<br>🕐 Sent: ${esc(fmtWhen(r.created_at))}` : '';
       const when = (r.class_start ? `<br>🗓️ Class: ${esc(new Date(r.class_start).toLocaleString())} · <b>${esc(timeUntil(r.class_start))}</b>` : '') + (r.available_time ? `<br>🕒 Available: ${esc(r.available_time)}` : '');
       const ext = r.extension_status === 'Requested' ? '<p class="muted">⏳ Extension requested — waiting for microedu</p>' : r.extension_status === 'Approved' ? `<p class="muted">✅ Extra ${r.extension_minutes} min approved by microedu</p>` : '';
-      return `<div class="req-card"><p><b>GID: ${esc(r.gid)}</b> · ${esc(r.subject)} — ${esc(r.topic)}${details ? `<br>${details}` : ''}<br>${r.hours} hr × BDT ${r.rate_bdt_per_hour} = <b>BDT ${r.amount_bdt}</b>${who}${sent}${when}</p>${tracker(r)}${respLine}${holdLine}<p>${escrowLine(r)}</p>${ext}${payBox}${btns.length ? `<p style="display:flex;gap:8px;flex-wrap:wrap">${btns.join('')}</p>` : ''}</div>`;
+      return `<div class="req-card" id="req-${esc(r.gid)}"><p><b>GID: ${esc(r.gid)}</b> · ${esc(r.subject)} — ${esc(r.topic)}${details ? `<br>${details}` : ''}<br>${r.hours} hr × BDT ${r.rate_bdt_per_hour} = <b>BDT ${r.amount_bdt}</b>${who}${sent}${when}</p>${tracker(r)}${respLine}${holdLine}<p>${escrowLine(r)}</p>${ext}${payBox}${btns.length ? `<p style="display:flex;gap:8px;flex-wrap:wrap">${btns.join('')}</p>` : ''}</div>`;
     };
     setHtml('myRequests', d.asStudent.filter(r => !(r.status === 'Pending' && r.on_hold_until && new Date(r.on_hold_until) > new Date())).map(r => render(r, 'student')).join('') || '<p class="muted">None yet</p>');
     setHtml('teacherReqs', d.asTeacher.map(r => render(r, 'teacher')).join('') || '<p class="muted">None yet</p>');
@@ -499,20 +499,33 @@ function renderNotifications(d) {
   const items = [];
   for (const r of d.asTeacher) {
     if (r.status === 'Pending' && (r.teacher_response || 'Waiting') === 'Waiting' && !(r.on_hold_until && new Date(r.on_hold_until) > new Date())) {
-      items.push(`<div class="notif-item"><p>📩 <b>New request</b> from <b>${esc(r.student_name || 'a student')}</b> — ${esc(r.subject)} · ${esc(r.topic)}<br>🕐 Sent: ${esc(fmtWhen(r.created_at))}${r.class_start ? `<br>🗓️ Class: ${esc(new Date(r.class_start).toLocaleString())} · <b>${esc(timeUntil(r.class_start))}</b>` : ''}${r.available_time ? `<br>🕒 Available: ${esc(r.available_time)}` : ''}</p><p style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="respondReq('${r.gid}','Accepted')">✅ Accept — I will teach this</button><button class="btn btn-ghost btn-sm" onclick="respondReq('${r.gid}','Declined')">Decline</button></p></div>`);
+      items.push(`<div class="notif-item" onclick="goToReq(event,'${r.gid}')" title="Click to see this request"><p>📩 <b>New request</b> from <b>${esc(r.student_name || 'a student')}</b> — ${esc(r.subject)} · ${esc(r.topic)}<br>🕐 Sent: ${esc(fmtWhen(r.created_at))}${r.class_start ? `<br>🗓️ Class: ${esc(new Date(r.class_start).toLocaleString())} · <b>${esc(timeUntil(r.class_start))}</b>` : ''}${r.available_time ? `<br>🕒 Available: ${esc(r.available_time)}` : ''}</p><p style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="respondReq('${r.gid}','Accepted')">✅ Accept — I will teach this</button><button class="btn btn-ghost btn-sm" onclick="respondReq('${r.gid}','Declined')">Decline</button></p></div>`);
     }
   }
   for (const r of d.asStudent) {
     if (r.teacher_response === 'Accepted' && r.status === 'Pending') {
-      items.push(`<div class="notif-item"><p>✅ <b>${esc(r.teacher_name || 'The teacher')}</b> accepted your request — ${esc(r.subject)} · ${esc(r.topic)}. You can now confirm payment in My Requests below.</p></div>`);
+      items.push(`<div class="notif-item" onclick="goToReq(event,'${r.gid}')" title="Click to see this request"><p>✅ <b>${esc(r.teacher_name || 'The teacher')}</b> accepted your request — ${esc(r.subject)} · ${esc(r.topic)}. You can now confirm payment in My Requests below.</p></div>`);
     }
     if (r.teacher_response === 'Declined') {
-      items.push(`<div class="notif-item"><p>❌ <b>${esc(r.teacher_name || 'The teacher')}</b> declined your request — ${esc(r.subject)} · ${esc(r.topic)}.</p></div>`);
+      items.push(`<div class="notif-item" onclick="goToReq(event,'${r.gid}')" title="Click to see this request"><p>❌ <b>${esc(r.teacher_name || 'The teacher')}</b> declined your request — ${esc(r.subject)} · ${esc(r.topic)}.</p></div>`);
     }
   }
   card.classList.toggle('hidden', !items.length);
   el.innerHTML = items.join('');
 }
+/* Clicking a notification jumps straight to that request's card and
+   flashes it, so the member lands exactly where the notification came
+   from. Clicks on buttons inside the notification do their own job. */
+window.goToReq = (ev, gid) => {
+  if (ev && ev.target && ev.target.closest('button, a, input')) return;
+  const el = document.getElementById('req-' + gid);
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.classList.remove('flash');
+  void el.offsetWidth;
+  el.classList.add('flash');
+  setTimeout(() => el.classList.remove('flash'), 2800);
+};
 /* bKash advance payment: student submits the TrxID; microedu verifies. */
 window.submitTrx = async gid => {
   const trx = (($('trx-' + gid) || {}).value || '').trim();
@@ -597,7 +610,7 @@ async function updateHeaderUser() {
     actions.querySelectorAll('a[href="dashboard"], a[href="register"]').forEach(a => { a.style.display = 'none'; });
     const chip = document.createElement('span');
     chip.className = 'user-chip';
-    chip.innerHTML = `${avatarHtml(d.person)}<a class="user-name" href="dashboard">${esc(displayName(d.person))}<small>Member ID ${d.person.id}</small></a><a class="bell" href="dashboard" title="Notifications">🔔<span class="bell-badge hidden" id="bellBadge"></span></a><button type="button" class="btn btn-ghost btn-sm" id="hdrSignOut">Sign Out</button>`;
+    chip.innerHTML = `${avatarHtml(d.person)}<a class="user-name" href="dashboard">${esc(displayName(d.person))}<small>Member ID ${d.person.id}</small></a><a class="bell" href="dashboard#notifCard" title="Notifications">🔔<span class="bell-badge hidden" id="bellBadge"></span></a><button type="button" class="btn btn-ghost btn-sm" id="hdrSignOut">Sign Out</button>`;
     actions.appendChild(chip);
     $('hdrSignOut').onclick = () => { token = ''; localStorage.removeItem('microedu_token'); localStorage.removeItem('d2d_token'); location.href = '/'; };
     try {
