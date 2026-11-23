@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS subscriptions(id INTEGER PRIMARY KEY AUTOINCREMENT, p
 CREATE TABLE IF NOT EXISTS tuition_requests(id INTEGER PRIMARY KEY AUTOINCREMENT, gid TEXT NOT NULL UNIQUE, student_id INTEGER NOT NULL REFERENCES registered_people(id), teacher_id INTEGER NOT NULL REFERENCES registered_people(id), level TEXT, subject TEXT NOT NULL, chapter TEXT, topic TEXT NOT NULL, hours REAL NOT NULL DEFAULT 1, rate_bdt_per_hour REAL NOT NULL DEFAULT 500, amount_bdt REAL NOT NULL, available_time TEXT, pay_with TEXT DEFAULT 'money', teacher_response TEXT DEFAULT 'Waiting', on_hold_until TEXT, status TEXT NOT NULL DEFAULT 'Pending', class_link TEXT, class_start TEXT, extension_minutes INTEGER DEFAULT 0, extension_status TEXT DEFAULT 'None', created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS time_entries(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, gid TEXT, topic TEXT, minutes INTEGER NOT NULL, kind TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS password_resets(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, email TEXT NOT NULL, done INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS notifications(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, text TEXT NOT NULL, gid TEXT, is_read INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS subscribers(id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS payments(id INTEGER PRIMARY KEY AUTOINCREMENT, gid TEXT NOT NULL, person_id INTEGER NOT NULL, amount_bdt REAL NOT NULL, method TEXT DEFAULT 'bKash', status TEXT NOT NULL DEFAULT 'Pending', escrow_status TEXT DEFAULT 'Awaiting payment', trxid TEXT, sender TEXT, verified INTEGER DEFAULT 0, rejected INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS wallet_entries(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, gid TEXT, topic TEXT, amount_bdt REAL NOT NULL, kind TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS feedback_evaluation(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, gid TEXT, comment TEXT, ranking INTEGER, complain TEXT, created_at TEXT DEFAULT (datetime('now')));
@@ -47,6 +49,8 @@ for (const sql of [
   'CREATE TABLE IF NOT EXISTS time_entries(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, gid TEXT, topic TEXT, minutes INTEGER NOT NULL, kind TEXT NOT NULL, created_at TEXT DEFAULT (datetime(\'now\')))',
   "UPDATE cv_details SET teacher_ready=1 WHERE teacher_ready=0 AND subjects IS NOT NULL AND subjects<>''",
   "CREATE TABLE IF NOT EXISTS password_resets(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, email TEXT NOT NULL, done INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')))",
+  "CREATE TABLE IF NOT EXISTS notifications(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER NOT NULL, text TEXT NOT NULL, gid TEXT, is_read INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')))",
+  "CREATE TABLE IF NOT EXISTS subscribers(id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, created_at TEXT DEFAULT (datetime('now')))",
   "ALTER TABLE tuition_requests ADD COLUMN teacher_response TEXT DEFAULT 'Waiting'",
   'ALTER TABLE tuition_requests ADD COLUMN on_hold_until TEXT',
   "UPDATE tuition_requests SET teacher_response='Accepted' WHERE status IN ('Confirm','Ongoing','Done') AND (teacher_response IS NULL OR teacher_response='Waiting')",
@@ -61,7 +65,12 @@ const PLANS = { 'Basic': 0, 'Plus': 300, 'Teacher Plus': 500 };
 
 function send(res, code, obj) { const b = JSON.stringify(obj); res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(b); }
 function body(req) { return new Promise(r => { let d=''; req.on('data',c=>d+=c); req.on('end',()=>{ try{r(JSON.parse(d||'{}'))}catch{r({})} }); }); }
-function auth(req) { const t = (req.headers.authorization||'').replace('Bearer ',''); if(!t) return null; const s = db.prepare('SELECT person_id FROM sessions WHERE token=?').get(t); return s ? db.prepare('SELECT * FROM registered_people WHERE id=?').get(s.person_id) : null; }
+/* Auto sign-out: a login lasts at most SESSION_HOURS (mirrors the Worker). */
+const SESSION_HOURS = 12;
+function auth(req) { const t = (req.headers.authorization||'').replace('Bearer ',''); if(!t) return null; const s = db.prepare('SELECT person_id, created_at FROM sessions WHERE token=?').get(t); if(!s) return null; const ageMs = Date.now() - Date.parse(String(s.created_at).replace(' ','T') + 'Z'); if(!(ageMs >= 0) || ageMs > SESSION_HOURS * 3600 * 1000) { db.prepare('DELETE FROM sessions WHERE token=?').run(t); return null; } return db.prepare('SELECT * FROM registered_people WHERE id=?').get(s.person_id); }
+/* Stored notifications: they stay in the member's bell panel until the
+   member deletes them — nothing here is recomputed or resurrected. */
+function notify(personId, text, gid) { try { db.prepare('INSERT INTO notifications(person_id,text,gid) VALUES(?,?,?)').run(personId, text, gid || null); } catch { /* a notification must never block the main action */ } }
 const pub = p => p && ({ id:p.id, role:p.role, name:p.name, email:p.email, phone:p.phone, mobile:p.mobile, picture:p.picture, created_at:p.created_at, photo_data:p.photo_data||null, photo_mode:p.photo_mode||'personal', group_name:p.group_name||null });
 /* Public view: anonymous members are masked — no name, contacts or photo. */
 const pubPublic = p => { const v = pub(p); if (!v) return v; if (v.photo_mode==='anonymous') return {...v, name:'Anonymous', email:null, phone:null, mobile:null, picture:null, photo_data:null, group_name:null, anonymous:true}; return v; };
@@ -282,6 +291,7 @@ const routes = {
     const info = db.prepare('INSERT INTO tuition_requests(gid,student_id,teacher_id,level,subject,chapter,topic,hours,rate_bdt_per_hour,amount_bdt,available_time,status,class_link,class_start,pay_with) VALUES(?,?,?,?,?,?,?,?,?,?,?,\'Pending\',?,?,?)')
       .run(g,me.id,t.id,b.level||null,b.subject,b.chapter||null,b.topic,hours,rate,amount,b.available_time||null,link,b.class_start||null,payWith);
     db.prepare('INSERT INTO payments(gid,person_id,amount_bdt,status) VALUES(?,?,?,\'Pending\')').run(g,me.id,amount);
+    notify(t.id, '📩 New request from ' + me.name + ' — ' + b.subject + ' · ' + b.topic, g);
     send(res,201,{request: stripLink(db.prepare('SELECT * FROM tuition_requests WHERE id=?').get(Number(info.lastInsertRowid)))});
   },
   /* bKash advance payment: student submits the TrxID; microedu (admin)
@@ -298,6 +308,7 @@ const routes = {
     db.prepare('UPDATE payments SET trxid=?, sender=?, rejected=0 WHERE gid=?').run(trxid, String(b.sender||'').trim()||null, r.gid);
     /* Choosing this teacher: siblings for the same help go on hold a day. */
     holdSiblings(r);
+    if (me.id !== 1) notify(1, '💳 ' + me.name + ' submitted a bKash payment (TrxID ' + trxid + ') — ' + r.subject + '. Please verify it.', r.gid);
     send(res,200,{ok:true});
   },
   'GET /api/payments/to-verify': (req,res) => {
@@ -318,6 +329,14 @@ const routes = {
       holdSiblings(r);
     } else {
       db.prepare('UPDATE payments SET rejected=1, trxid=NULL, sender=NULL WHERE gid=?').run(r.gid);
+    }
+    const stuV = db.prepare('SELECT name FROM registered_people WHERE id=?').get(r.student_id);
+    const teaV = db.prepare('SELECT name FROM registered_people WHERE id=?').get(r.teacher_id);
+    if (b.ok) {
+      notify(r.student_id, '✅ Your payment was verified — your class with ' + (teaV ? teaV.name : 'your teacher') + ' is confirmed (' + r.subject + ').', r.gid);
+      notify(r.teacher_id, '✅ Payment verified for your class with ' + (stuV ? stuV.name : 'your student') + ' (' + r.subject + ').', r.gid);
+    } else {
+      notify(r.student_id, '⚠️ Your bKash payment could not be verified — please check the TrxID and submit again (' + r.subject + ').', r.gid);
     }
     send(res,200,{ok:true});
   },
@@ -353,6 +372,8 @@ const routes = {
       db.prepare("UPDATE payments SET escrow_status='Released' WHERE gid=?").run(r.gid);
       /* Service properly received: siblings for this help are removed. */
       deleteSiblingsFinal(r);
+      if (r.pay_with==='time' || Number(r.amount_bdt) <= 0) notify(r.teacher_id, '⏳ Class done — ' + mins + ' minutes of time credit added to your time bank (' + r.subject + ').', r.gid);
+      else notify(r.teacher_id, '💰 Class done — BDT ' + r.amount_bdt + ' added to your wallet (' + r.subject + ').', r.gid);
     }
     send(res,200,{request: stripLink(db.prepare('SELECT * FROM tuition_requests WHERE gid=?').get(r.gid))});
   },
@@ -370,6 +391,9 @@ const routes = {
     if (!['Accepted','Declined'].includes(b.response)) return send(res,400,{error:'response must be Accepted or Declined'});
     if (b.response==='Declined') db.prepare("UPDATE tuition_requests SET teacher_response='Declined', status='Cancelled' WHERE gid=?").run(r.gid);
     else db.prepare("UPDATE tuition_requests SET teacher_response='Accepted' WHERE gid=?").run(r.gid);
+    notify(r.student_id, b.response === 'Accepted'
+      ? '✅ ' + me.name + ' accepted your request — ' + r.subject + ' · ' + r.topic + '. You can now pay in My Requests.'
+      : '❌ ' + me.name + ' declined your request — ' + r.subject + ' · ' + r.topic + '.', r.gid);
     send(res,200,{request: stripLink(db.prepare('SELECT * FROM tuition_requests WHERE gid=?').get(r.gid))});
   },
   /* Secure join: link returned only to this booking's own student/teacher,
@@ -443,6 +467,48 @@ const routes = {
     if (amt > walletBalance(me.id)) return send(res,400,{error:'Insufficient wallet balance'});
     db.prepare("INSERT INTO wallet_entries(person_id,gid,topic,amount_bdt,kind) VALUES(?,NULL,'Withdraw',?,'withdraw')").run(me.id,-amt);
     send(res,200,{balance: walletBalance(me.id)});
+  },
+  /* Email subscription list: paid plans are paused, so the Subscription
+     page only collects an email address. Anyone may join; the admin sees
+     the list (with member details when the email belongs to a member). */
+  'POST /api/subscribe': async (req,res) => {
+    const b = await body(req);
+    const email = String(b.email || '').trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return send(res,400,{error:'Please enter a valid email address'});
+    const ex = db.prepare('SELECT id FROM subscribers WHERE email=?').get(email);
+    if (ex) return send(res,200,{ok:true, already:true});
+    db.prepare('INSERT INTO subscribers(email) VALUES(?)').run(email);
+    send(res,201,{ok:true});
+  },
+  'GET /api/subscribers': (req,res) => {
+    const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
+    if (me.id!==1) return send(res,403,{error:'microedu admin only'});
+    const rows = db.prepare('SELECT s.id, s.email, s.created_at, p.id AS member_id, p.name AS member_name FROM subscribers s LEFT JOIN registered_people p ON lower(p.email)=s.email ORDER BY s.id DESC').all();
+    send(res,200,{subscribers: rows});
+  },
+  /* The member's own stored notifications (bell panel). They stay until
+     the member deletes them — one by one, or all at once. */
+  'GET /api/notifications': (req,res) => {
+    const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
+    const rows = db.prepare('SELECT id, text, gid, is_read, created_at FROM notifications WHERE person_id=? ORDER BY id DESC LIMIT 40').all(me.id);
+    const u = db.prepare('SELECT COUNT(*) AS n FROM notifications WHERE person_id=? AND is_read=0').get(me.id);
+    send(res,200,{notifications: rows, unread: u ? u.n : 0});
+  },
+  'POST /api/notifications/read': (req,res) => {
+    const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
+    db.prepare('UPDATE notifications SET is_read=1 WHERE person_id=?').run(me.id);
+    send(res,200,{ok:true});
+  },
+  'POST /api/notifications/delete': async (req,res) => {
+    const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
+    const b = await body(req);
+    db.prepare('DELETE FROM notifications WHERE id=? AND person_id=?').run(Number(b.id) || 0, me.id);
+    send(res,200,{ok:true});
+  },
+  'POST /api/notifications/clear': (req,res) => {
+    const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
+    db.prepare('DELETE FROM notifications WHERE person_id=?').run(me.id);
+    send(res,200,{ok:true});
   },
   'POST /api/feedback': async (req,res) => {
     const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});

@@ -23,7 +23,24 @@ async function api(path, opts = {}) {
   return d;
 }
 function msg(el, text, ok = true) { el.textContent = text; el.className = 'msg ' + (ok ? 'ok' : 'err'); }
-function saveToken(t) { token = t; localStorage.setItem('microedu_token', t); localStorage.removeItem('d2d_token'); }
+function saveToken(t) { token = t; localStorage.setItem('microedu_token', t); localStorage.setItem('microedu_login_at', String(Date.now())); localStorage.removeItem('d2d_token'); }
+/* Auto sign-out: a login lasts at most 12 hours (the server enforces the
+   same limit; this clears the screen the moment the time is up). */
+const SESSION_MS = 12 * 3600 * 1000;
+function checkSessionExpiry() {
+  if (!token) return;
+  const at = Number(localStorage.getItem('microedu_login_at') || 0);
+  if (!at) { localStorage.setItem('microedu_login_at', String(Date.now())); return; }
+  if (Date.now() - at > SESSION_MS) {
+    token = '';
+    localStorage.removeItem('microedu_token'); localStorage.removeItem('d2d_token'); localStorage.removeItem('microedu_login_at');
+    sessionStorage.setItem('microedu_expired', '1');
+    location.reload();
+  }
+}
+setInterval(checkSessionExpiry, 60000);
+checkSessionExpiry();
+if (sessionStorage.getItem('microedu_expired')) { sessionStorage.removeItem('microedu_expired'); setTimeout(() => alert('For safety, you were signed out after 12 hours. Please sign in again.'), 300); }
 function fillPlans() { const s = $('subPlan'); if (s) s.innerHTML = PLANS.map(p => `<option>${p}</option>`).join(''); }
 fillPlans();
 const fmtMins = m => { m = Math.round(Number(m) || 0); const h = Math.floor(m / 60), r = m % 60; return h ? `${h}h ${r}m` : `${r}m`; };
@@ -173,8 +190,8 @@ window.resetPw = async id => { try { const d = await api('/api/password-resets/r
 window.dismissPw = async id => { try { await api('/api/password-resets/dismiss', { method: 'POST', body: JSON.stringify({ id }) }); loadPwResets(); } catch (e) { alert(e.message); } };
 
 on('signOut', 'onclick', () => {
-  token = ''; me = null; myTimeBalance = 0;
-  localStorage.removeItem('microedu_token'); localStorage.removeItem('d2d_token');
+  me = null; myTimeBalance = 0;
+  clearSession();
   hideEl('profileBox'); hideEl('teacherCard'); hideEl('adminCard'); hideEl('dashMain');
   /* Nothing private stays on screen after sign-out: profile, requests,
      wallet, time bank and admin lists are all emptied, not just hidden. */
@@ -248,7 +265,7 @@ function showProfile(p, cv) {
   prefillDetailsForm(p);
   hideEl('teacherCard', false);
   fillPlans();
-  if (p.id === 1) { hideEl('adminCard', false); loadExtensions(); loadPwResets(); loadVerify(); }
+  if (p.id === 1) { hideEl('adminCard', false); loadExtensions(); loadPwResets(); loadVerify(); loadSubscribers(); }
   const isTeacher = !!(cv && Number(cv.teacher_ready || 0));
   const appear = p.photo_mode === 'anonymous' ? '🕶️ Anonymous (public lists hide your name & photo)'
     : p.photo_mode === 'group' ? '👥 Group' + (p.group_name ? ': ' + esc(p.group_name) : '')
@@ -280,20 +297,23 @@ function showProfile(p, cv) {
   loadTimebank();
 }
 
-/* ---------- subscription ---------- */
-on('subBtn', 'onclick', async () => {
+/* ---------- subscription: email list only for now (paid plans paused) ---------- */
+on('subJoinBtn', 'onclick', async () => {
+  const email = (($('subEmail') || {}).value || '').trim();
+  if (!email) return msg($('subMsg'), 'Please enter your email address.', false);
   try {
-    const d = await api('/api/subscriptions', { method: 'POST', body: JSON.stringify({ plan: $('subPlan').value, months: $('subMonths').value }) });
-    const s = d.subscription;
-    $('subList').innerHTML = `<p>${esc(s.plan)} · ${s.months} month(s) · BDT ${s.amount_bdt} · Status: <b>${esc(s.status)}</b> <button class="btn btn-primary btn-sm" id="subConfirm">Confirm Payment</button></p>`;
-    $('subConfirm').onclick = async () => {
-      const c = await api('/api/subscriptions/confirm', { method: 'POST', body: JSON.stringify({ id: s.id }) });
-      $('subList').innerHTML = `<p>${esc(c.subscription.plan)} · ${c.subscription.months} month(s) · BDT ${c.subscription.amount_bdt} · Status: <b>${esc(c.subscription.status)}</b></p>`;
-      loadPeople();
-    };
-    msg($('subMsg'), 'Subscription created — Pending');
+    const d = await api('/api/subscribe', { method: 'POST', body: JSON.stringify({ email }) });
+    msg($('subMsg'), d.already ? 'This email is already on the subscription list. Thank you!' : 'Thank you! Your email is now on the microedu subscription list.');
+    $('subEmail').value = '';
   } catch (e) { msg($('subMsg'), e.message, false); }
 });
+/* microedu admin: who is on the email subscription list. */
+async function loadSubscribers() {
+  try {
+    const d = await api('/api/subscribers');
+    setHtml('subsList', d.subscribers.length ? d.subscribers.map(s => `<p>📧 <b>${esc(s.email)}</b>${s.member_id ? ` — member #${s.member_id} ${esc(s.member_name || '')}` : ' — not a registered member yet'}<br><span class="muted">Joined: ${esc(fmtWhen(s.created_at))}</span></p>`).join('') : '<p class="muted">Nobody has subscribed yet.</p>');
+  } catch (e) { /* not the admin */ }
+}
 
 /* ---------- teachers & requests ---------- */
 function calcTotal() { const h = Number($('qHours').value) || 1; $('qTotal').textContent = 'BDT ' + (h * 500); }
@@ -561,32 +581,71 @@ async function loadMine() {
     };
     setHtml('myRequests', d.asStudent.filter(r => !(r.status === 'Pending' && r.on_hold_until && new Date(r.on_hold_until) > new Date())).map(r => render(r, 'student')).join('') || '<p class="muted">None yet</p>');
     setHtml('teacherReqs', d.asTeacher.map(r => render(r, 'teacher')).join('') || '<p class="muted">None yet</p>');
-    renderNotifications(d);
+    applyDashView();
+    const goGid = sessionStorage.getItem('microedu_goto');
+    if (goGid) { sessionStorage.removeItem('microedu_goto'); setTimeout(() => goToReq(null, goGid), 350); }
     loadWallet();
   } catch (e) { /* not signed in */ }
 }
-/* Notifications: new requests land here for the teacher (with the Accept /
-   Decline buttons right on the notification), and the student sees here
-   when a teacher accepts or declines. The card hides when there is none. */
-function renderNotifications(d) {
-  const el = $('notifList'); const card = $('notifCard'); if (!el || !card) return;
-  const items = [];
-  for (const r of d.asTeacher) {
-    if (r.status === 'Pending' && (r.teacher_response || 'Waiting') === 'Waiting' && !(r.on_hold_until && new Date(r.on_hold_until) > new Date())) {
-      items.push(`<div class="notif-item" onclick="goToReq(event,'${r.gid}')" title="Click to see this request"><p>📩 <b>New request</b> from <b>${esc(r.student_name || 'a student')}</b> — ${esc(r.subject)} · ${esc(r.topic)}<br>🕐 Sent: ${esc(fmtWhen(r.created_at))}${r.class_start ? `<br>🗓️ Class: ${esc(new Date(r.class_start).toLocaleString())} · <b>${esc(timeUntil(r.class_start))}</b>` : ''}${r.available_time ? `<br>🕒 Available: ${esc(r.available_time)}` : ''}</p><p style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="respondReq('${r.gid}','Accepted')">✅ Accept — I will teach this</button><button class="btn btn-ghost btn-sm" onclick="respondReq('${r.gid}','Declined')">Decline</button></p></div>`);
-    }
-  }
-  for (const r of d.asStudent) {
-    if (r.teacher_response === 'Accepted' && r.status === 'Pending') {
-      items.push(`<div class="notif-item" onclick="goToReq(event,'${r.gid}')" title="Click to see this request"><p>✅ <b>${esc(r.teacher_name || 'The teacher')}</b> accepted your request — ${esc(r.subject)} · ${esc(r.topic)}. You can now confirm payment in My Requests below.</p></div>`);
-    }
-    if (r.teacher_response === 'Declined') {
-      items.push(`<div class="notif-item" onclick="goToReq(event,'${r.gid}')" title="Click to see this request"><p>❌ <b>${esc(r.teacher_name || 'The teacher')}</b> declined your request — ${esc(r.subject)} · ${esc(r.topic)}.</p></div>`);
-    }
-  }
-  card.classList.toggle('hidden', !items.length);
-  el.innerHTML = items.join('');
+/* ---------- dashboard view toggle: As Student / As Teacher ---------- */
+function applyDashView() {
+  if (!$('dashMain')) return;
+  const teacher = (localStorage.getItem('microedu_dash_view') || 'student') === 'teacher';
+  const show = (id, yes) => { const el = $(id); if (el) el.classList.toggle('hidden', !yes); };
+  show('myReqCard', !teacher);
+  show('walletCard', teacher);
+  show('reqToMeCard', teacher);
+  const vs = $('viewStudent'), vt = $('viewTeacher');
+  if (vs) vs.classList.toggle('sel', !teacher);
+  if (vt) vt.classList.toggle('sel', teacher);
 }
+window.setDashView = v => { localStorage.setItem('microedu_dash_view', v); applyDashView(); };
+on('viewStudent', 'onclick', () => setDashView('student'));
+on('viewTeacher', 'onclick', () => setDashView('teacher'));
+
+/* ---------- notifications: stored on the server, shown in the bell panel ----------
+   They stay until the member deletes them (✕ one by one, or Clear all).
+   Nothing is recomputed from requests, so a deleted one never comes back. */
+async function refreshBellBadge() {
+  try {
+    const d = await api('/api/notifications');
+    const b = $('bellBadge');
+    if (b) { if (d.unread > 0) { b.textContent = d.unread; b.classList.remove('hidden'); } else b.classList.add('hidden'); }
+  } catch (e) { /* bell stays without a badge */ }
+}
+async function renderNotifPanel() {
+  const p = $('notifPanel'); if (!p) return;
+  let d = { notifications: [] };
+  try { d = await api('/api/notifications'); } catch (e) { /* offline */ }
+  const items = d.notifications.map(n => `<div class="np-item" onclick="gotoNotif('${n.gid || ''}')"><p>${esc(n.text)}</p><small>${esc(fmtWhen(n.created_at))}</small><button type="button" class="np-del" title="Delete this notification" onclick="delNotif(event, ${n.id})">✕</button></div>`).join('');
+  p.innerHTML = `<div class="np-head"><b>🔔 Notifications</b>${d.notifications.length ? '<button type="button" class="np-clear" onclick="clearNotifs(event)">Clear all</button>' : ''}</div>` + (items || '<p class="np-empty">No notifications yet.</p>');
+}
+async function toggleNotifPanel() {
+  const p = $('notifPanel'); if (!p) return;
+  if (!p.classList.contains('hidden')) { p.classList.add('hidden'); return; }
+  await renderNotifPanel();
+  p.classList.remove('hidden');
+  try { await api('/api/notifications/read', { method: 'POST' }); } catch (e) { /* ignore */ }
+  refreshBellBadge();
+}
+window.delNotif = async (ev, id) => {
+  ev.stopPropagation();
+  try { await api('/api/notifications/delete', { method: 'POST', body: JSON.stringify({ id }) }); renderNotifPanel(); } catch (e) { /* ignore */ }
+};
+window.clearNotifs = async ev => {
+  ev.stopPropagation();
+  if (!confirm('Delete all your notifications?')) return;
+  try { await api('/api/notifications/clear', { method: 'POST' }); renderNotifPanel(); refreshBellBadge(); } catch (e) { /* ignore */ }
+};
+window.gotoNotif = gid => {
+  if (!gid) return;
+  if (document.getElementById('req-' + gid)) { const p = $('notifPanel'); if (p) p.classList.add('hidden'); goToReq(null, gid); }
+  else { sessionStorage.setItem('microedu_goto', gid); location.href = 'dashboard'; }
+};
+document.addEventListener('click', e => {
+  const p = $('notifPanel');
+  if (p && !p.classList.contains('hidden') && !e.target.closest('.bell-wrap')) p.classList.add('hidden');
+});
 /* Clicking a notification jumps straight to that request's card and
    flashes it, so the member lands exactly where the notification came
    from. Clicks on buttons inside the notification do their own job. */
@@ -671,9 +730,18 @@ async function restoreSession() {
   if (!token || !$('profileBox')) return;
   try { const d = await api('/api/me'); me = d.person; showProfile(d.person, d.cv); } catch (e) { /* stale token */ }
 }
+/* Signing out must remove every trace of the signed-in header: the chip
+   (photo, name, ID, bell) goes away and Sign In / Join Free come back. */
+function clearSession() {
+  token = '';
+  localStorage.removeItem('microedu_token'); localStorage.removeItem('d2d_token'); localStorage.removeItem('microedu_login_at');
+  const chip = document.querySelector('.user-chip');
+  if (chip) chip.remove();
+  document.querySelectorAll('.top-actions a[href="dashboard"], .top-actions a[href="register"]').forEach(a => { a.style.display = ''; });
+}
 /* Signed-in state in the top menu bar, on every page: the member's own
    photo, name and ID replace Sign In / Join Free, with a notification
-   bell (badge = new requests waiting + my accepted requests) and a
+   bell (click it — the panel lists the stored notifications) and a
    Sign Out button. Signed-out visitors keep the default bar. */
 async function updateHeaderUser() {
   if (!token) return;
@@ -684,16 +752,11 @@ async function updateHeaderUser() {
     actions.querySelectorAll('a[href="dashboard"], a[href="register"]').forEach(a => { a.style.display = 'none'; });
     const chip = document.createElement('span');
     chip.className = 'user-chip';
-    chip.innerHTML = `${avatarHtml(d.person)}<a class="user-name" href="dashboard">${esc(displayName(d.person))}<small>Member ID ${d.person.id}</small></a><a class="bell" href="dashboard#notifCard" title="Notifications">🔔<span class="bell-badge hidden" id="bellBadge"></span></a><button type="button" class="btn btn-ghost btn-sm" id="hdrSignOut">Sign Out</button>`;
+    chip.innerHTML = `${avatarHtml(d.person)}<a class="user-name" href="dashboard">${esc(displayName(d.person))}<small>Member ID ${d.person.id}</small></a><span class="bell-wrap"><button type="button" class="bell" id="bellBtn" title="Notifications">🔔<span class="bell-badge hidden" id="bellBadge"></span></button><div class="notif-panel hidden" id="notifPanel"></div></span><button type="button" class="btn btn-ghost btn-sm" id="hdrSignOut">Sign Out</button>`;
     actions.appendChild(chip);
-    $('hdrSignOut').onclick = () => { token = ''; localStorage.removeItem('microedu_token'); localStorage.removeItem('d2d_token'); location.href = '/'; };
-    try {
-      const mr = await api('/api/my-requests');
-      const n = mr.asTeacher.filter(r => r.status === 'Pending' && (r.teacher_response || 'Waiting') === 'Waiting').length
-        + mr.asStudent.filter(r => r.status === 'Pending' && r.teacher_response === 'Accepted').length;
-      const b = $('bellBadge');
-      if (b && n > 0) { b.textContent = n; b.classList.remove('hidden'); }
-    } catch (e) { /* bell stays without a badge */ }
+    $('hdrSignOut').onclick = () => { clearSession(); location.href = '/'; };
+    $('bellBtn').onclick = e => { e.stopPropagation(); toggleNotifPanel(); };
+    refreshBellBadge();
   } catch (e) { /* stale token: leave the default bar */ }
 }
 function loadAll() { loadTeachers(); loadPeople(); loadMine(); restoreSession(); updateHeaderUser(); loadBranches(); initHelpParams(); }
@@ -804,6 +867,8 @@ const BN = {
   lblCurPass: 'বর্তমান পাসওয়ার্ড', lblNewPass: 'নতুন পাসওয়ার্ড', lblNewPass2: 'নতুন পাসওয়ার্ড আবার',
   saveDetailsBtn: 'আমার তথ্য সেভ করুন', changePassBtn: 'পাসওয়ার্ড বদলান',
   phYourPass: 'আপনার পাসওয়ার্ড', signOutBtn: 'সাইন আউট', myProfile: 'আমার প্রোফাইল', notifTitle: '🔔 নোটিফিকেশন',
+  viewStudentBtn: '🎓 ছাত্র হিসেবে', viewTeacherBtn: '👩‍🏫 শিক্ষক হিসেবে',
+  subStayTitle: 'microedu তালিকায় থাকুন।', subStayText: 'পেইড প্ল্যান আপাতত বন্ধ আছে। শুধু আপনার ইমেইল ঠিকানাটি দিন — খবর, নতুন শিক্ষক আর অফারের জন্য আপনি microedu সাবস্ক্রিপশন তালিকায় থাকবেন।', lblSubEmail: 'ইমেইল ঠিকানা', subJoinBtn: 'আমার ইমেইল যোগ করুন', adminSubsTitle: '📧 সাবস্ক্রিপশন তালিকা (ইমেইল)',
   navBranches: 'ব্রাঞ্চসমূহ', brEyebrow: '— বিষয় ম্যাপিং', brTitle: 'বিষয়ভিত্তিক <span class="u-line">ম্যাপিং</span>।',
   brSub: 'স্কুল, কলেজ বা বিশ্ববিদ্যালয় — বিষয় বেছে নিন আর দেখুন কোন শিক্ষকরা ওই বিষয়ে সাহায্য করতে পারবেন। বিষয়ে চাপ দিলে সাহায্যের ফর্ম তৈরি হয়ে যাবে, শিক্ষকের নামে চাপ দিলে সরাসরি ওই শিক্ষককেই চাওয়া যাবে।',
   brPH: '⭐ পাবলিক হেলথ — আমাদের বিশেষ ব্রাঞ্চ', brPHSub: 'পাবলিক হেলথ বিশেষজ্ঞ ও শিক্ষক, বিশেষভাবে চিহ্নিত।',

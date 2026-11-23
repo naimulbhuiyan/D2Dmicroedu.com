@@ -87,15 +87,15 @@
       </div>
 
       <div id="dashMain" class="hidden">
+      <div class="dash-toggle" id="dashToggle">
+        <button type="button" id="viewStudent" class="sel" data-i18n="viewStudentBtn">🎓 As Student</button>
+        <button type="button" id="viewTeacher" data-i18n="viewTeacherBtn">👩‍🏫 As Teacher</button>
+      </div>
       <div class="card" id="anonCard">
         <h3 data-i18n="anonTitle">🕶️ Anonymous mode</h3>
         <label style="display:flex;gap:10px;align-items:center;font-size:16px;cursor:pointer"><input type="checkbox" id="anonToggle" style="width:20px;height:20px"> <span data-i18n="anonLabel">Hide my name and phone number from everyone</span></label>
         <p class="muted" data-i18n="anonHint">When this is on, other members see you only as “Anonymous” — but your education and qualifications still show, so you can teach anyone, or take help from anyone, without revealing who you are. microedu can still see your details.</p>
         <div class="msg" id="anonMsg"></div>
-      </div>
-      <div class="card hidden" id="notifCard">
-        <h3 data-i18n="notifTitle">🔔 Notifications</h3>
-        <div id="notifList"></div>
       </div>
       <div class="card narrow hidden" id="teacherCard">
         <h3 data-i18n="teacherCardTitle">👩‍🏫 Become a teacher — complete your profile</h3>
@@ -128,6 +128,8 @@
         <div id="pwResetList"></div>
         <h3 class="cv-title" data-i18n="adminPayTitle">💳 bKash payments to verify</h3>
         <div id="verifyList"></div>
+        <h3 class="cv-title" data-i18n="adminSubsTitle">📧 Subscription list (emails)</h3>
+        <div id="subsList"></div>
       </div>
 
       <div class="grid two">
@@ -137,7 +139,7 @@
           <p class="muted" data-i18n="timeBankNote">Teach a free class and the time lands here. Spend it learning from teachers who accept time exchange.</p>
           <div id="tbEntries"></div>
         </div>
-        <div class="card">
+        <div class="card" id="walletCard">
           <h3>💼 <span data-i18n="walletTitle">My wallet</span> <span class="muted" data-i18n="forTeachers">(teachers)</span></h3>
           <p class="wallet-bal"><span data-i18n="lblBalance">Balance:</span> <b id="wBalance">BDT 0</b></p>
           <div id="wEntries"></div>
@@ -145,7 +147,7 @@
           <p><button class="btn btn-primary" id="wBtn" data-i18n="withdrawBtn">Withdraw</button></p>
           <div class="msg" id="wMsg"></div>
         </div>
-        <div class="card">
+        <div class="card" id="reqToMeCard">
           <h3>📩 <span data-i18n="reqToMeTitle">Requests to me</span> <span class="muted" data-i18n="forTeachers">(teachers)</span></h3>
           <div id="teacherReqs"></div>
           <h3 class="cv-title" data-i18n="feedbackTitle">⭐ Evaluation / Feedback</h3>
@@ -159,7 +161,7 @@
         </div>
       </div>
 
-      <div class="card my-requests-card">
+      <div class="card my-requests-card" id="myReqCard">
         <h3 data-i18n="myReqTitle">My requests</h3>
         <div id="myRequests"></div>
       </div>
