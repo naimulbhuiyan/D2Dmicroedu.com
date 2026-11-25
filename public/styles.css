@@ -180,6 +180,31 @@ input:focus,select:focus,textarea:focus{border-color:var(--teal);background:#fff
 .tracker{display:inline-flex;gap:5px;flex-wrap:wrap;margin:8px 0}
 .tracker b{font-size:12px;padding:3px 11px;border-radius:999px;background:#eef0f3;color:var(--muted)}
 .tracker b.on{background:var(--teal);color:#fff}
+/* Dashboard activity flow: the live service as 6 linked steps.
+   done = green check, now = orange, upcoming = grey. Each step is a
+   link to where that stage lives (request card, wallet, time bank). */
+.flow-steps{display:flex;align-items:stretch;gap:6px;flex-wrap:wrap;margin:14px 0 6px}
+.flow-step{flex:1 1 120px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;padding:12px 8px;border-radius:12px;border:1.5px solid var(--border);background:#f7f8fa;color:var(--muted);font-size:13.5px;font-weight:700;line-height:1.3}
+.flow-step:hover{border-color:var(--teal);color:var(--teal)}
+.flow-step .flow-n{width:28px;height:28px;border-radius:50%;background:#e6e8ec;color:var(--body);display:flex;align-items:center;justify-content:center;font-size:14px}
+.flow-step.done{background:#ecfdf5;border-color:#86efac;color:#166534}
+.flow-step.done .flow-n{background:#16a34a;color:#fff}
+.flow-step.now{background:var(--orange-soft);border-color:var(--orange);color:var(--orange-dark);box-shadow:0 0 0 3px rgba(249,115,22,.18)}
+.flow-step.now .flow-n{background:var(--orange);color:#fff}
+.flow-arrow{align-self:center;color:var(--muted);font-weight:800}
+.flow-links{margin-top:10px;font-size:15px}
+/* Full activity page: the same 13 steps as a vertical flow, each step
+   a card with a "Check" link to the matching dashboard place. */
+.act-step{display:flex;gap:16px;align-items:flex-start}
+.act-num{flex:none;width:40px;height:40px;border-radius:50%;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px}
+.act-num.amber{background:var(--orange)}
+.act-num.pink{background:#db2777}
+.act-body{flex:1;background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow)}
+.act-body h3{margin:0 0 4px;font-size:18px}
+.act-body p{margin:0;font-size:15px}
+.act-check{margin-top:8px;font-size:14.5px;font-weight:700}
+.act-line{width:2px;background:var(--border);margin-left:19px;height:22px}
+.act-note{background:#fff6e6;border:1px solid #f0b429;border-radius:14px;padding:16px 18px}
 .thumb{width:34px;height:34px;border-radius:50%;object-fit:cover;vertical-align:middle}
 .success-box{background:#ecfdf5;border:1.5px solid #10b981;border-radius:14px;padding:16px 18px;font-size:15px;line-height:1.55;color:#065f46;text-align:left;font-weight:500}
 .success-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}

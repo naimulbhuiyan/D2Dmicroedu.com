@@ -192,10 +192,10 @@ window.dismissPw = async id => { try { await api('/api/password-resets/dismiss',
 on('signOut', 'onclick', () => {
   me = null; myTimeBalance = 0;
   clearSession();
-  hideEl('profileBox'); hideEl('teacherCard'); hideEl('adminCard'); hideEl('dashMain');
+  hideEl('profileBox'); hideEl('teacherCard'); hideEl('adminCard'); hideEl('dashMain'); hideEl('flowCard');
   /* Nothing private stays on screen after sign-out: profile, requests,
      wallet, time bank and admin lists are all emptied, not just hidden. */
-  ['profileContent', 'myRequests', 'teacherReqs', 'wEntries', 'tbEntries', 'extList', 'pwResetList'].forEach(id => { const el = $(id); if (el) el.innerHTML = ''; });
+  ['profileContent', 'myRequests', 'teacherReqs', 'wEntries', 'tbEntries', 'extList', 'pwResetList', 'flowSteps', 'flowFor'].forEach(id => { const el = $(id); if (el) el.innerHTML = ''; });
   const wb = $('wBalance'); if (wb) wb.textContent = 'BDT 0';
   const tb = $('tbBalance'); if (tb) tb.textContent = '0 min';
   const sf = $('signForm'); if (sf) sf.classList.remove('hidden');
@@ -514,6 +514,60 @@ function tracker(r) {
   const cur = steps.indexOf(r.status);
   return `<span class="tracker">${steps.map((s, i) => `<b class="${i <= cur ? 'on' : ''}">${s}</b>`).join('')}</span>`;
 }
+/* ---------- dashboard activity flow: the member's live service as a
+   6-step flow, shown only while an active service exists for this view.
+   Every step is a link to where that stage lives, so the member can
+   check each stage. The full 13-step flow lives on /activity. */
+const FLOW_STEPS = [
+  { en: 'Request sent', bn: 'রিকোয়েস্ট পাঠানো' },
+  { en: 'Teacher accepts', bn: 'শিক্ষক রাজি' },
+  { en: 'Payment confirmed', bn: 'পেমেন্ট নিশ্চিত' },
+  { en: 'Class link ready', bn: 'ক্লাস লিংক তৈরি' },
+  { en: 'Session', bn: 'সেশন' },
+  { en: 'Done & paid', bn: 'শেষ ও পেমেন্ট' },
+];
+let lastMineData = null;
+function flowStage(r) {
+  if (r.status === 'Done') return 6;
+  if (r.status === 'Ongoing') return 4;
+  if (r.status === 'Confirm') return 3;
+  if (r.teacher_response === 'Accepted') return 2;
+  return 1;
+}
+function renderFlow(d) {
+  const card = $('flowCard'); if (!card) return;
+  const teacher = (localStorage.getItem('microedu_dash_view') || 'student') === 'teacher';
+  const list = d ? (teacher ? d.asTeacher : d.asStudent) || [] : [];
+  const active = list.filter(r => ['Pending', 'Confirm', 'Ongoing'].includes(r.status) && !(r.on_hold_until && new Date(r.on_hold_until) > new Date()));
+  const r = active[0];
+  if (!r) { card.classList.add('hidden'); $('flowSteps').innerHTML = ''; setText('flowFor', ''); return; }
+  const cur = flowStage(r);
+  const lang = localStorage.getItem('microedu_lang') === 'bn' ? 'bn' : 'en';
+  const who = teacher ? r.student_name : r.teacher_name;
+  setText('flowFor', `GID: ${r.gid} · ${r.subject} — ${r.topic}` + (who ? ` · ${teacher ? 'Student' : 'Teacher'}: ${who}` : ''));
+  const reqLink = `#req-${r.gid}`;
+  const lastHref = teacher ? '#walletCard' : (r.pay_with === 'time' || Number(r.amount_bdt) === 0 ? '#tbBalance' : reqLink);
+  const hrefs = [reqLink, reqLink, reqLink, reqLink, reqLink, lastHref];
+  $('flowSteps').innerHTML = FLOW_STEPS.map((s, i) => {
+    const cls = i < cur ? 'done' : i === cur ? 'now' : '';
+    const mark = i < cur ? '✓ ' : (i === cur ? '● ' : '');
+    const click = hrefs[i].startsWith('#req-') ? ` onclick="flashReq(event,'${esc(r.gid)}')"` : '';
+    return `<a class="flow-step ${cls}" href="${hrefs[i]}"${click} title="${esc(s.en)}"><span class="flow-n">${i + 1}</span><span>${mark}${esc(s[lang])}</span></a>`;
+  }).join('<span class="flow-arrow">→</span>');
+  const all = $('flowAllLink');
+  if (all) { all.href = teacher ? '#reqToMeCard' : '#myReqCard'; all.textContent = lang === 'bn' ? BN[teacher ? 'flowAllToMe' : 'flowAllReq'] : (teacher ? 'All requests to me →' : 'All my requests →'); }
+  card.classList.remove('hidden');
+}
+/* Jump to a request card from a flow step and flash it, so the member
+   lands exactly on the activity that step is about. */
+window.flashReq = (ev, gid) => {
+  const el = document.getElementById('req-' + gid);
+  if (!el) return;
+  el.classList.remove('flash');
+  void el.offsetWidth;
+  el.classList.add('flash');
+  setTimeout(() => el.classList.remove('flash'), 2800);
+};
 function escrowLine(r) {
   if (r.pay_with === 'time') {
     const t = { 'Held': ['held', 'Time credit reserved with microedu'], 'Released': ['released', 'Time credit given to the teacher'], 'Refunded': ['refunded', 'Time credit returned'] }[r.escrow_status] || ['unpaid', 'Time credit not reserved yet'];
@@ -581,7 +635,9 @@ async function loadMine() {
     };
     setHtml('myRequests', d.asStudent.filter(r => !(r.status === 'Pending' && r.on_hold_until && new Date(r.on_hold_until) > new Date())).map(r => render(r, 'student')).join('') || '<p class="muted">None yet</p>');
     setHtml('teacherReqs', d.asTeacher.map(r => render(r, 'teacher')).join('') || '<p class="muted">None yet</p>');
+    lastMineData = d;
     applyDashView();
+    renderFlow(d);
     const goGid = sessionStorage.getItem('microedu_goto');
     if (goGid) { sessionStorage.removeItem('microedu_goto'); setTimeout(() => goToReq(null, goGid), 350); }
     loadWallet();
@@ -598,6 +654,9 @@ function applyDashView() {
   const vs = $('viewStudent'), vt = $('viewTeacher');
   if (vs) vs.classList.toggle('sel', !teacher);
   if (vt) vt.classList.toggle('sel', teacher);
+  /* The flow card follows the view: the active service as a student is
+     a different booking from the active service as a teacher. */
+  renderFlow(lastMineData);
 }
 window.setDashView = v => { localStorage.setItem('microedu_dash_view', v); applyDashView(); };
 on('viewStudent', 'onclick', () => setDashView('student'));
@@ -877,6 +936,27 @@ const BN = {
   walletTitle: 'আমার ওয়ালেট', forTeachers: '(শিক্ষকদের জন্য)', lblBalance: 'ব্যালেন্স:',
   lblWithdrawAmt: 'উত্তোলনের পরিমাণ (টাকা)', withdrawBtn: 'উত্তোলন করুন',
   reqToMeTitle: 'আমার কাছে আসা রিকোয়েস্ট', feedbackTitle: '⭐ মূল্যায়ন / ফিডব্যাক',
+  flowTitle: 'আমার কার্যক্রমের ধারা', flowFull: 'পুরো কার্যক্রমের ধারা দেখুন →', flowAllReq: 'আমার সব রিকোয়েস্ট →', flowAllToMe: 'আমার কাছে আসা সব রিকোয়েস্ট →',
+  flowS1: 'রিকোয়েস্ট পাঠানো', flowS2: 'শিক্ষক রাজি', flowS3: 'পেমেন্ট নিশ্চিত', flowS4: 'ক্লাস লিংক তৈরি', flowS5: 'সেশন', flowS6: 'শেষ ও পেমেন্ট',
+  actTitle: 'পুরো কার্যক্রমের ধারা', actSub: 'প্রথম ভিজিট থেকে ক্লাস শেষ ও শিক্ষকের পেমেন্ট পর্যন্ত — টাকা ও সময়, দুইভাবেই। নিচের প্রতিটি ধাপে সেই কাজটি কোথায় হয় তার লিংক দেওয়া আছে।', actBack: '← আমার ড্যাশবোর্ডে ফিরুন', actCheck: 'দেখুন:',
+  actT1: 'ভিজিটর এলেন', actD1: 'হোম পেজ · EN / বাংলা ভাষা বদল',
+  actT2: 'রেজিস্টার বা সাইন ইন', actD2: 'নাম, ফোন, ইমেইল, পাসওয়ার্ড → মেম্বার আইডি · অথবা ইমেইল / মেম্বার আইডি দিয়ে সাইন ইন',
+  actT3: 'পড়াতে চান?', actD3: 'পুরো শিক্ষক প্রোফাইল পূরণ করুন (সব CV তথ্য) → শিক্ষক প্রস্তুত',
+  actT4: 'শিক্ষার্থী: I Need Help', actD4: 'সাইন ইন লাগবে · লেভেল, বিষয়, টপিক',
+  actT5: 'পরামর্শ', actD5: 'মিলে যাওয়া শিক্ষক, ঘণ্টাপ্রতি রেটসহ · সবাইকে পাঠান / সেরা ৩ / microedu বেছে দেবে / নাম দিয়ে খুঁজুন',
+  actT6: 'শিক্ষককে জানানো হলো', actD6: 'বেল → ড্যাশবোর্ড “Requests to me” · রিকোয়েস্টে দেখা যায় কখন পাঠানো, ক্লাসের সময়, কতক্ষণ বাকি',
+  actT7: 'শিক্ষক রাজি হলেন?', actD7: 'রাজি — অথবা না করলে শিক্ষার্থী অন্য শিক্ষক বেছে নেবেন',
+  actT8: 'শিক্ষার্থী আগাম পেমেন্ট করলেন', actD8: 'bKash → TrxID জমা → microedu (অ্যাডমিন) যাচাই → টাকা জমা (Escrow HELD)',
+  actT9: 'নিরাপদ ক্লাস লিংক', actD9: 'Jitsi রুম · Join বাটন শুধু সেই শিক্ষার্থী ও শিক্ষকের জন্য · নির্ধারিত সময় + ৩০ মিনিট',
+  actT10: 'সেশন হলো', actD10: 'অডিও / ভিডিও লিংকে সরাসরি ১-টু-১ ক্লাস',
+  actT11: 'শিক্ষার্থী Done চিহ্নিত করলেন', actD11: 'শিক্ষার্থী নিশ্চিত করলেন ক্লাস শেষ হয়েছে',
+  actT12: 'জমা টাকা ছাড়া হলো', actD12: 'শিক্ষকের ওয়ালেটে টাকা গেল · ফ্রি ক্লাস হলে শিক্ষক টাইম ক্রেডিট পেলেন',
+  actT13: 'সম্পূর্ণ ✓', actD13: 'পরের রিকোয়েস্টের জন্য প্রস্তুত',
+  actBranchTitle: 'অন্যভাবে গেলে', actBD1: 'শিক্ষক না করলেন', actBDD1: 'বুকিং বাতিল · শিক্ষার্থীকে জানানো হয় · শিক্ষার্থী অন্য শিক্ষক বেছে নেন',
+  actBD2: 'ছাড়ার আগে সমস্যা?', actD2x: 'শিক্ষার্থীকে পুরো টাকা ফেরত · একবারে একজন শিক্ষক — বাকিরা ১ দিন বন্ধ, Done হলে বাকিদের তথ্য চলে যায়',
+  actAlso: 'সাইটে আরও যা আছে', actAlso1: 'অজ্ঞাত মোড — নাম / ছবি / ফোন লুকান, যোগ্যতা দেখা যাবে · Teacher / Student ড্যাশবোর্ড টগল',
+  actAlso2: 'সেশন টাইমআউট · নোটিফিকেশনের ইতিহাস + ডিলিট · শুধু ইমেইলে সাবস্ক্রিপশন (পেইড প্ল্যান বন্ধ আছে)',
+  actAlso3: 'Subject Mapping (স্কুল / কলেজ / বিশ্ববিদ্যালয় / প্রফেশনাল) — আপাতত লুকানো, শিক্ষক বাড়লে আসবে',
   lblGid: 'ক্লাস GID', lblComment: 'মন্তব্য', phComment: 'ক্লাস কেমন ছিল?',
   lblRanking: 'র্যাংকিং', lblComplain: 'অভিযোগ', phComplain: 'কোনো সমস্যা? জানান — সমস্যা থাকলে সম্পূর্ণ টাকা ফেরত',
   feedbackBtn: 'ফিডব্যাক জমা দিন',

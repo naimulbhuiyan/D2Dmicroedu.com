@@ -91,6 +91,16 @@
         <button type="button" id="viewStudent" class="sel" data-i18n="viewStudentBtn">🎓 As Student</button>
         <button type="button" id="viewTeacher" data-i18n="viewTeacherBtn">👩‍🏫 As Teacher</button>
       </div>
+      <!-- Activity flow: shown only while signed in AND an active service
+           (a Pending / Confirm / Ongoing request) exists for this view.
+           Each step is a link to where that activity lives, so the member
+           can check every stage. Filled in by renderFlow() in app.js. -->
+      <div class="card hidden" id="flowCard">
+        <h3>🔄 <span data-i18n="flowTitle">My activity flow</span></h3>
+        <p class="muted" id="flowFor"></p>
+        <div class="flow-steps" id="flowSteps"></div>
+        <p class="flow-links"><a href="activity" data-i18n="flowFull">See the full activity flow →</a> &nbsp;·&nbsp; <a href="#myReqCard" id="flowAllLink" data-i18n="flowAllReq">All my requests →</a></p>
+      </div>
       <div class="card" id="anonCard">
         <h3 data-i18n="anonTitle">🕶️ Anonymous mode</h3>
         <label style="display:flex;gap:10px;align-items:center;font-size:16px;cursor:pointer"><input type="checkbox" id="anonToggle" style="width:20px;height:20px"> <span data-i18n="anonLabel">Hide my name and phone number from everyone</span></label>
