@@ -10,6 +10,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/styles.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0e7c86">
+<link rel="apple-touch-icon" href="/icon-180.png">
 </head>
 <body>
 
@@ -47,6 +50,7 @@
           <div><label data-i18n="lblPassword">Password</label><input id="sPass" type="password" required data-i18n-ph="phYourPass" placeholder="Your password"></div></div>
           <p><button class="btn btn-primary" type="submit" data-i18n="signInBtn">Sign In</button>
           <button class="btn btn-ghost btn-sm" type="button" id="forgotToggle" data-i18n="forgotLink">Forgot password?</button></p>
+          <p class="muted" data-i18n="signInNote">One account for both learning and teaching — sign in once, then learn or teach from your dashboard.</p>
           <div class="msg" id="signMsg"></div>
         </form>
         <form id="forgotForm" class="hidden">
@@ -95,6 +99,7 @@
            (a Pending / Confirm / Ongoing request) exists for this view.
            Each step is a link to where that activity lives, so the member
            can check every stage. Filled in by renderFlow() in app.js. -->
+      <div class="do-now hidden" id="doNowBanner"></div>
       <div class="card hidden" id="flowCard">
         <h3>🔄 <span data-i18n="flowTitle">My activity flow</span></h3>
         <p class="muted" id="flowFor"></p>
@@ -147,11 +152,13 @@
           <h3>⏳ <span data-i18n="timeBankTitle">My time bank</span></h3>
           <p class="wallet-bal"><span data-i18n="lblTimeBalance">Time credit:</span> <b id="tbBalance">0 min</b></p>
           <p class="muted" data-i18n="timeBankNote">Teach a free class and the time lands here. Spend it learning from teachers who accept time exchange.</p>
+          <p class="muted" data-i18n="timeBankNote2">Time credit: 1 free class hour = 60 minutes earned. Spend it only with teachers who accept time exchange.</p>
           <div id="tbEntries"></div>
         </div>
         <div class="card" id="walletCard">
           <h3>💼 <span data-i18n="walletTitle">My wallet</span> <span class="muted" data-i18n="forTeachers">(teachers)</span></h3>
           <p class="wallet-bal"><span data-i18n="lblBalance">Balance:</span> <b id="wBalance">BDT 0</b></p>
+          <p class="muted" data-i18n="walletNote">Held = money microedu is keeping safe until the class is Done. Released = paid to the teacher. Refunded = sent back to the student.</p>
           <div id="wEntries"></div>
           <div class="row"><div><label data-i18n="lblWithdrawAmt">Withdraw amount (BDT)</label><input id="wAmt" type="number" min="1" placeholder="500"></div></div>
           <p><button class="btn btn-primary" id="wBtn" data-i18n="withdrawBtn">Withdraw</button></p>
@@ -159,6 +166,7 @@
         </div>
         <div class="card" id="reqToMeCard">
           <h3>📩 <span data-i18n="reqToMeTitle">Requests to me</span> <span class="muted" data-i18n="forTeachers">(teachers)</span></h3>
+          <p class="muted" id="myRatingLine"></p>
           <div id="teacherReqs"></div>
           <h3 class="cv-title" data-i18n="feedbackTitle">⭐ Evaluation / Feedback</h3>
           <label data-i18n="lblGid">Class GID</label><input id="fGid" placeholder="XXXX-XXX-XXX">
@@ -193,6 +201,7 @@
       <a href="plans" data-i18n="navSub">Subscription</a>
       <a href="register" data-i18n="regLink">Registration</a>
       <a href="teachers#people" data-i18n="navPeople">Registered People</a>
+      <a href="faq" data-i18n="navFaq">FAQ — Common questions</a>
     </div>
     <div class="foot-col">
       <h4 data-i18n="footKnow">Good to know</h4>
@@ -200,6 +209,7 @@
       <p data-i18n="know2">🛡️ Full refund if there is a problem</p>
       <p data-i18n="know3">📍 Dhaka, Bangladesh</p>
       <p data-i18n="know4">🕒 Support at your available time</p>
+      <p data-i18n="footContact">📞 +8801729071571 (phone &amp; WhatsApp) · ✉️ data2decision20@gmail.com</p>
     </div>
   </div>
   <div class="foot-bar wrap"><span data-i18n="footCopy">© 2026 microedu.com — Micro Edu. Support</span><span data-i18n="footTag">Learn and teach from the same account</span></div>

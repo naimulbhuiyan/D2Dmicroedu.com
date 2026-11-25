@@ -309,6 +309,44 @@ async function notify(db, personId, text, gid) {
   try { await db.prepare('INSERT INTO notifications(person_id,text,gid) VALUES(?,?,?)').bind(personId, text, gid || null).run(); } catch (e) { /* a notification must never block the main action */ }
 }
 
+/* ---------- email alerts (2.1) ----------
+   Email goes out through Cloudflare Email Sending (a `send_email`
+   binding, variable name EMAIL). That binding is NOT set up yet — the
+   domain still has to be onboarded and the binding added in the
+   Cloudflare dashboard (see docs/EMAIL_SETUP.md — 2-minute step for the
+   site owner). Until then sendMail is a safe no-op: the in-site bell
+   stays the record, and a missing binding can never break a request,
+   payment or accept. Nothing here invents credentials. */
+const SITE_URL = 'https://d2dmicroedu-com.du-naimul2024.workers.dev';
+/* CHANGE THIS when onboarding: the From address must belong to a domain
+   onboarded for Email Sending in the Cloudflare dashboard. */
+const EMAIL_FROM = 'microedu@microedu.eu.org';
+async function sendMail(env, to, subject, text) {
+  try {
+    if (!env || !env.EMAIL || !to) return false;
+    await env.EMAIL.send({ from: EMAIL_FROM, to, subject, text });
+    return true;
+  } catch (e) { console.log('sendMail failed:', e && e.message); return false; }
+}
+/* Email alert to one member (looks up their real email address — the
+   public anonymous mask does not apply here). Returns false when email
+   is not configured or the member has no email; never throws. */
+async function mailTo(db, personId, subject, text, env) {
+  try {
+    const p = await db.prepare('SELECT email FROM registered_people WHERE id=?').bind(personId).first();
+    if (!p || !p.email) return false;
+    return await sendMail(env, p.email, subject, text);
+  } catch { return false; }
+}
+
+/* Completed classes + average stars for a teacher (1.5): from the
+   requests they finished and the feedback left on those classes. */
+async function teacherStats(db, teacherId) {
+  const c = await db.prepare("SELECT COUNT(*) AS n FROM tuition_requests WHERE teacher_id=? AND status='Done'").bind(teacherId).first();
+  const r = await db.prepare("SELECT AVG(f.ranking) AS avg, COUNT(f.ranking) AS n FROM feedback_evaluation f JOIN tuition_requests t ON t.gid=f.gid WHERE t.teacher_id=? AND f.ranking IS NOT NULL").bind(teacherId).first();
+  return { completed: c ? c.n : 0, rating_avg: r && r.avg !== null ? Math.round(Number(r.avg) * 10) / 10 : null, rating_count: r ? r.n : 0 };
+}
+
 const pub = p => p && ({
   id: p.id, role: p.role, name: p.name, email: p.email,
   phone: p.phone, mobile: p.mobile, picture: p.picture, created_at: p.created_at,
@@ -552,7 +590,19 @@ const routes = {
     return send({ person: pub(person), cv: await cvOf(db, me.id) }, 200);
   },
 
+  /* Public counts only — no names, emails or phones (1.2). The home page
+     counters read this, so they work for signed-out visitors too. */
+  'GET /api/stats': async (request, db) => {
+    const t = await db.prepare('SELECT COUNT(*) AS c FROM cv_details WHERE teacher_ready=1').first();
+    const tt = await db.prepare('SELECT COUNT(*) AS c FROM cv_details WHERE teacher_ready=1 AND accepts_time_exchange=1').first();
+    const m = await db.prepare('SELECT COUNT(*) AS c FROM registered_people').first();
+    return send({ counts: { teachers: t ? t.c : 0, members: m ? m.c : 0, time_teachers: tt ? tt.c : 0 } }, 200);
+  },
+
+  /* Registered People list (Decision A): signed-in members only. The
+     full member rows (names, emails, phones) are no longer public. */
   'GET /api/people': async (request, db) => {
+    const me = await auth(request, db); if (!me) return send({ error: 'Sign in required' }, 401);
     const rows = (await db.prepare('SELECT * FROM registered_people ORDER BY id').all()).results;
     const people = [];
     for (const p of rows) {
@@ -571,7 +621,7 @@ const routes = {
   'GET /api/teachers': async (request, db) => {
     const rows = (await db.prepare('SELECT p.* FROM registered_people p JOIN cv_details c ON c.person_id=p.id WHERE c.teacher_ready=1 ORDER BY p.id').all()).results;
     const teachers = [];
-    for (const p of rows) teachers.push({ ...pubPublic(p), cv: await cvOf(db, p.id) });
+    for (const p of rows) teachers.push({ ...pubPublic(p), cv: await cvOf(db, p.id), ...(await teacherStats(db, p.id)) });
     return send({ teachers }, 200);
   },
 
@@ -595,7 +645,7 @@ const routes = {
     return send({ subscription }, 200);
   },
 
-  'POST /api/requests': async (request, db) => {
+  'POST /api/requests': async (request, db, env) => {
     const me = await auth(request, db); if (!me) return send({ error: 'Sign in required' }, 401);
     const b = await body(request);
     if (!b.teacher_id || !b.subject || !b.topic) return send({ error: 'teacher_id, subject and topic are required' }, 400);
@@ -630,6 +680,10 @@ const routes = {
       .bind(g, me.id, t.id, b.level || null, b.subject, b.chapter || null, b.topic, hours, rate, amount, b.available_time || null, link, b.class_start || null, payWith).run();
     await db.prepare("INSERT INTO payments(gid,person_id,amount_bdt,status) VALUES(?,?,?,'Pending')").bind(g, me.id, amount).run();
     await notify(db, t.id, '📩 New request from ' + me.name + ' — ' + b.subject + ' · ' + b.topic, g);
+    /* Email alert (2.1): new request → the teacher. No-op until Email
+       Sending is set up; the bell above stays the record. */
+    await mailTo(db, t.id, 'New request on microedu.com — ' + b.subject,
+      'Hi ' + (t.name || 'teacher') + ',\n\n' + me.name + ' asked for help with ' + b.subject + ' — ' + b.topic + ' (' + hours + ' hour' + (hours > 1 ? 's' : '') + ').\n\nSign in to accept or decline it:\n' + SITE_URL + '/dashboard\n\n— microedu.com', env);
     const requestRow = await db.prepare('SELECT * FROM tuition_requests WHERE id=?').bind(Number(info.meta.last_row_id)).first();
     return send({ request: stripLink(requestRow) }, 201);
   },
@@ -661,7 +715,7 @@ const routes = {
     return send({ payments: rows }, 200);
   },
 
-  'POST /api/payments/verify': async (request, db) => {
+  'POST /api/payments/verify': async (request, db, env) => {
     const me = await auth(request, db); if (!me) return send({ error: 'Sign in required' }, 401);
     if (me.id !== 1) return send({ error: 'microedu admin only' }, 403);
     const b = await body(request);
@@ -679,6 +733,11 @@ const routes = {
     if (b.ok) {
       await notify(db, r.student_id, '✅ Your payment was verified — your class with ' + (teaV ? teaV.name : 'your teacher') + ' is confirmed (' + r.subject + ').', r.gid);
       await notify(db, r.teacher_id, '✅ Payment verified for your class with ' + (stuV ? stuV.name : 'your student') + ' (' + r.subject + ').', r.gid);
+      /* Email alert (2.1): payment verified → student + teacher. */
+      await mailTo(db, r.student_id, 'Payment verified — your microedu class is confirmed',
+        'Hi ' + (stuV ? stuV.name : '') + ',\n\nYour payment for ' + r.subject + ' — ' + r.topic + ' was verified. Your class with ' + (teaV ? teaV.name : 'your teacher') + ' is confirmed.\n\nSee it in your dashboard:\n' + SITE_URL + '/dashboard#myReqCard\n\n— microedu.com', env);
+      await mailTo(db, r.teacher_id, 'Payment verified for your microedu class',
+        'Hi ' + (teaV ? teaV.name : '') + ',\n\nPayment was verified for your class with ' + (stuV ? stuV.name : 'your student') + ' (' + r.subject + ' — ' + r.topic + '). The money is held safely with microedu until the class is Done.\n\nSee it in your dashboard:\n' + SITE_URL + '/dashboard#reqToMeCard\n\n— microedu.com', env);
     } else {
       await notify(db, r.student_id, '⚠️ Your bKash payment could not be verified — please check the TrxID and submit again (' + r.subject + ').', r.gid);
     }
@@ -735,7 +794,7 @@ const routes = {
      me"): Accept = willing to give the service, Decline = not willing
      (the booking is cancelled). Only while the request is Pending. The
      student sees the answer in their dashboard. */
-  'POST /api/requests/respond': async (request, db) => {
+  'POST /api/requests/respond': async (request, db, env) => {
     const me = await auth(request, db); if (!me) return send({ error: 'Sign in required' }, 401);
     const b = await body(request);
     const r = await db.prepare('SELECT * FROM tuition_requests WHERE gid=?').bind(b.gid || '').first();
@@ -752,6 +811,13 @@ const routes = {
     await notify(db, r.student_id, b.response === 'Accepted'
       ? '✅ ' + me.name + ' accepted your request — ' + r.subject + ' · ' + r.topic + '. You can now pay in My Requests.'
       : '❌ ' + me.name + ' declined your request — ' + r.subject + ' · ' + r.topic + '.', r.gid);
+    /* Email alert (2.1): teacher accepts → the student. (A decline is
+       bell-only — the student picks another teacher from the dashboard.) */
+    if (b.response === 'Accepted') {
+      const stu = await db.prepare('SELECT name FROM registered_people WHERE id=?').bind(r.student_id).first();
+      await mailTo(db, r.student_id, me.name + ' accepted your microedu request — ' + r.subject,
+        'Hi ' + (stu ? stu.name : '') + ',\n\n' + me.name + ' accepted your request for ' + r.subject + ' — ' + r.topic + '. You can now pay in My Requests.\n\nSign in to pay:\n' + SITE_URL + '/dashboard#myReqCard\n\n— microedu.com', env);
+    }
     const updated = await db.prepare('SELECT * FROM tuition_requests WHERE gid=?').bind(r.gid).first();
     return send({ request: stripLink(updated) }, 200);
   },
@@ -892,13 +958,30 @@ const routes = {
     return send({ ok: true });
   },
 
+  /* One rating per member per class (2.2): rating the same class again
+     replaces the earlier rating instead of adding a second row, so the
+     averages in 1.5 stay honest. */
   'POST /api/feedback': async (request, db) => {
     const me = await auth(request, db); if (!me) return send({ error: 'Sign in required' }, 401);
     const b = await body(request);
+    const ranking = b.ranking ? Number(b.ranking) : null;
+    if (ranking !== null && (ranking < 1 || ranking > 5)) return send({ error: 'Ranking must be 1 to 5 stars' }, 400);
+    const existing = b.gid ? await db.prepare('SELECT * FROM feedback_evaluation WHERE person_id=? AND gid=?').bind(me.id, b.gid).first() : null;
+    if (existing) {
+      await db.prepare('UPDATE feedback_evaluation SET comment=?, ranking=?, complain=? WHERE id=?').bind(b.comment || null, ranking, b.complain || null, existing.id).run();
+      return send({ feedback: await db.prepare('SELECT * FROM feedback_evaluation WHERE id=?').bind(existing.id).first() }, 200);
+    }
     const info = await db.prepare('INSERT INTO feedback_evaluation(person_id,gid,comment,ranking,complain) VALUES(?,?,?,?,?)')
-      .bind(me.id, b.gid || null, b.comment || null, b.ranking ? Number(b.ranking) : null, b.complain || null).run();
+      .bind(me.id, b.gid || null, b.comment || null, ranking, b.complain || null).run();
     const feedback = await db.prepare('SELECT * FROM feedback_evaluation WHERE id=?').bind(Number(info.meta.last_row_id)).first();
     return send({ feedback }, 201);
+  },
+
+  /* A teacher's own completed classes + average stars (2.2), shown under
+     the As Teacher view in the dashboard. */
+  'GET /api/my-rating': async (request, db) => {
+    const me = await auth(request, db); if (!me) return send({ error: 'Sign in required' }, 401);
+    return send(await teacherStats(db, me.id), 200);
   },
 
   /* Teacher suggestions for a help request: match the learner's words
@@ -916,7 +999,7 @@ const routes = {
       const matched = words.filter(w => hay.includes(w));
       let score = matched.length;
       if (level && (cv.level || '').toLowerCase().includes(level)) score += 2;
-      scored.push({ ...pubPublic(p), cv, match_score: score, matched });
+      scored.push({ ...pubPublic(p), cv, match_score: score, matched, ...(await teacherStats(db, p.id)) });
     }
     scored.sort((a, b) => b.match_score - a.match_score || (Number(a.cv.rate_bdt_per_hour) || 0) - (Number(b.cv.rate_bdt_per_hour) || 0));
     return send({ teachers: scored.slice(0, 6) }, 200);
@@ -945,7 +1028,10 @@ const routes = {
            side sees only "Anonymous student/teacher". The member themself
            and microedu (admin, id 1) still see the real name. */
         const shownName = (row, pid, label) => (!row ? null : (row.photo_mode === 'anonymous' && me.id !== pid && me.id !== 1 ? label : row.name));
-        out.push({ ...stripLink(r), escrow_status: pay ? pay.escrow_status : 'Awaiting payment', pay_status: pay ? pay.status : null, trxid: pay ? pay.trxid : null, sender: pay ? pay.sender : null, verified: pay ? pay.verified : 0, rejected: pay ? pay.rejected : 0, student_name: shownName(sn, r.student_id, 'Anonymous student'), teacher_name: shownName(tn, r.teacher_id, 'Anonymous teacher') });
+        /* The student's own rating for this class (2.2) — null when the
+           class has not been rated yet, so the card can offer the stars. */
+        const fb = await db.prepare('SELECT ranking, comment FROM feedback_evaluation WHERE person_id=? AND gid=? ORDER BY id DESC LIMIT 1').bind(me.id, r.gid).first();
+        out.push({ ...stripLink(r), escrow_status: pay ? pay.escrow_status : 'Awaiting payment', pay_status: pay ? pay.status : null, trxid: pay ? pay.trxid : null, sender: pay ? pay.sender : null, verified: pay ? pay.verified : 0, rejected: pay ? pay.rejected : 0, student_name: shownName(sn, r.student_id, 'Anonymous student'), teacher_name: shownName(tn, r.teacher_id, 'Anonymous teacher'), my_rating: fb ? fb.ranking : null, my_rating_comment: fb ? fb.comment : null });
       }
       return out;
     };
@@ -968,7 +1054,7 @@ export default {
       try { await ensureDb(env.DB); } catch { /* proceed with normal handling */ }
     }
     if (routes[key]) {
-      try { return await routes[key](request, env.DB); }
+      try { return await routes[key](request, env.DB, env); }
       catch (e) { return send({ error: e.message }, 500); }
     }
     if (url.pathname.startsWith('/api/')) return send({ error: 'Not found' }, 404);

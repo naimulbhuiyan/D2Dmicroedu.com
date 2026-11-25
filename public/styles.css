@@ -356,3 +356,18 @@ button.bell{background:none;border:none;cursor:pointer;padding:0;font-size:19px}
 .dash-toggle{display:inline-flex;gap:4px;background:#eef5f4;border:1px solid var(--border);border-radius:999px;padding:4px;margin-bottom:16px}
 .dash-toggle button{background:none;border:none;border-radius:999px;padding:8px 18px;font-weight:800;font-size:14.5px;color:#33655f;cursor:pointer;font-family:inherit}
 .dash-toggle button.sel{background:#0b6b5e;color:#fff}
+
+/* "Do this now" banner (1.1): one next action for the most urgent
+   active service, above the activity flow card. */
+.do-now{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;background:var(--orange-soft);border:1.5px solid var(--orange);border-radius:14px;padding:14px 18px;margin-bottom:16px;box-shadow:var(--shadow)}
+.do-now b{color:var(--ink);font-size:15.5px}
+/* Subject chips on I Need Help (1.3): tappable, same look as the chips. */
+.chips button.chip{cursor:pointer;font:inherit}
+.chips button.chip:hover{border-color:var(--teal);color:var(--teal-dark);background:var(--teal-soft)}
+/* One-tap rating on a Done request card (2.2). */
+.rate-box{border-top:1px dashed var(--border);margin-top:12px;padding-top:10px}
+/* FAQ page (1.6). */
+.faq-item{border-bottom:1px solid var(--border);padding:18px 0}
+.faq-item:last-child{border-bottom:none}
+.faq-item h3{font-size:18px;margin-bottom:6px}
+.faq-item p{font-size:15.5px}

@@ -45,6 +45,46 @@ function fillPlans() { const s = $('subPlan'); if (s) s.innerHTML = PLANS.map(p 
 fillPlans();
 const fmtMins = m => { m = Math.round(Number(m) || 0); const h = Math.floor(m / 60), r = m % 60; return h ? `${h}h ${r}m` : `${r}m`; };
 
+/* Bilingual text for strings rendered by JavaScript (1.1–2.2): pick the
+   visitor's language. Bangla is the default when no choice is stored
+   (Decision B) — stored 'en' is the only thing that switches to English. */
+function curLang() { return localStorage.getItem('microedu_lang') === 'en' ? 'en' : 'bn'; }
+const L = o => (o && (o[curLang()] || o.en)) || '';
+/* Return to the page the visitor came from after signing in or
+   registering (Section 7): stored as a full path, e.g. /help?level=... */
+function setReturnTo(path) { try { sessionStorage.setItem('microedu_return_to', path); } catch (e) { /* ignore */ } }
+function takeReturnTo() {
+  try { const to = sessionStorage.getItem('microedu_return_to'); if (to) { sessionStorage.removeItem('microedu_return_to'); return to; } } catch (e) { /* ignore */ }
+  return null;
+}
+/* Copy a value (bKash number / exact amount) to the clipboard, with a
+   short "Copied ✓" on the button itself (1.4). */
+async function copyText(txt, btn) {
+  let ok = false;
+  try { await navigator.clipboard.writeText(txt); ok = true; }
+  catch (e) {
+    try { const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); ok = document.execCommand('copy'); ta.remove(); } catch (e2) { /* ignore */ }
+  }
+  if (btn) {
+    const old = btn.textContent;
+    btn.textContent = ok ? '✓ ' + L({ en: 'Copied', bn: 'কপি হয়েছে' }) : L({ en: 'Copy failed — long-press to copy', bn: 'কপি হয়নি — চেপে ধরে কপি করুন' });
+    setTimeout(() => { btn.textContent = old; }, 1600);
+  }
+  return ok;
+}
+window.copyText = copyText;
+/* Subject chips on I Need Help (1.3): one tap fills the subject with
+   its English name, because matching runs against English CVs. */
+window.setSubject = v => { const s = $('qSubject'); if (s) { s.value = v; saveHelpDraft(); s.focus(); } };
+/* Fill the bKash sender number from the signed-in member's profile
+   (1.4) — only into boxes the member has not typed in yet. */
+function prefillSenderInputs() {
+  if (!me) return;
+  const v = me.mobile || me.phone || '';
+  if (!v) return;
+  document.querySelectorAll('[data-sender-input]').forEach(el => { if (!el.value) el.value = v; });
+}
+
 /* ---------- how a member appears: name / group name / anonymous ----------
    Photos are not used on microedu (removed by decision, 22 Nov 2026) —
    everyone is shown by name with an initials avatar, or anonymously. */
@@ -99,6 +139,9 @@ on('regForm', 'onsubmit', async e => {
     }) });
     saveToken(d.token); me = d.person; showProfile(d.person, d.cv);
     showRegSuccess(d.person);
+    /* Came from another page to register? Go back there after a moment. */
+    const to = takeReturnTo();
+    if (to) setTimeout(() => { location.href = to; }, 2500);
     loadAll();
   } catch (err) { msg($('regMsg'), err.message, false); }
 });
@@ -137,6 +180,7 @@ on('teacherForm', 'onsubmit', async e => {
   try {
     const d = await api('/api/teacher-profile', { method: 'POST', body: JSON.stringify({ cv }) });
     showProfile(d.person, d.cv);
+    clearTeacherDraft();
     msg($('teacherMsg'), 'Teacher profile saved — you are now in the teacher list.');
     loadAll();
   } catch (err) { msg($('teacherMsg'), err.message, false); }
@@ -160,6 +204,9 @@ on('signForm', 'onsubmit', async e => {
     const d = await api('/api/signin', { method: 'POST', body: JSON.stringify({ email: $('sEmail').value, password: $('sPass').value }) });
     saveToken(d.token); me = d.person; showProfile(d.person, d.cv);
     msg($('signMsg'), 'Welcome, ' + d.person.name);
+    /* Came from another page without signing in? Go back there. */
+    const to = takeReturnTo();
+    if (to) { setTimeout(() => { location.href = to; }, 500); return; }
     /* Came from "I Need Help" without signing in? Continue to the form. */
     if (sessionStorage.getItem('microedu_after_login') === 'help') {
       sessionStorage.removeItem('microedu_after_login');
@@ -196,6 +243,8 @@ on('signOut', 'onclick', () => {
   /* Nothing private stays on screen after sign-out: profile, requests,
      wallet, time bank and admin lists are all emptied, not just hidden. */
   ['profileContent', 'myRequests', 'teacherReqs', 'wEntries', 'tbEntries', 'extList', 'pwResetList', 'flowSteps', 'flowFor'].forEach(id => { const el = $(id); if (el) el.innerHTML = ''; });
+  const bn = $('doNowBanner'); if (bn) { bn.classList.add('hidden'); bn.innerHTML = ''; }
+  const ml = $('myRatingLine'); if (ml) ml.textContent = '';
   const wb = $('wBalance'); if (wb) wb.textContent = 'BDT 0';
   const tb = $('tbBalance'); if (tb) tb.textContent = '0 min';
   const sf = $('signForm'); if (sf) sf.classList.remove('hidden');
@@ -294,6 +343,11 @@ function showProfile(p, cv) {
     (isTeacher ? teacherDetails
       : `<div class="profile-next"><img src="/images/teacher.webp" alt=""><div class="profile-next-text"><b>Learn anything — or become a teacher</b><p>You can learn from any teacher with this account. To teach, complete your full profile; it takes only a few minutes.</p></div><button class="btn btn-primary" type="button" onclick="goTeach()">👩‍🏫 Become a teacher</button></div>`);
   prefillTeacherForm(cv);
+  /* A typed-but-unsaved teacher profile survives a session timeout:
+     the draft (saved on every keystroke) wins over the saved CV. */
+  restoreTeacherDraft();
+  /* The bKash sender number comes from this member's own profile. */
+  prefillSenderInputs();
   loadTimebank();
 }
 
@@ -323,10 +377,18 @@ function renderTeacherCard(t, suggested = false, requestable = true) {
   teacherPricing[t.id] = { pricing: (t.cv && t.cv.pricing_type) || 'hourly', rate: (t.cv && t.cv.rate_bdt_per_hour) || 500, acceptsTime: !!(t.cv && Number(t.cv.accepts_time_exchange || 0)) };
   const subjects = (t.cv && t.cv.subjects ? t.cv.subjects : '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 4);
   const matchNote = suggested && t.matched && t.matched.length ? `<p class="match-note">✨ Matches: ${esc(t.matched.join(', '))}</p>` : '';
+  /* Completed classes + average stars (1.5), from feedback already
+     collected. Shown for anonymous teachers too — name and phone stay
+     hidden, qualifications and track record still show. */
+  const done = Number(t.completed || 0);
+  const statsLine = !done
+    ? `<p class="t-meta">🌱 ${esc(L({ en: 'New teacher — no completed class yet', bn: 'নতুন শিক্ষক — এখনো কোনো ক্লাস শেষ হয়নি' }))}</p>`
+    : `<p class="t-meta">${t.rating_avg ? `⭐ ${t.rating_avg} (${t.rating_count} rating${t.rating_count > 1 ? 's' : ''}) · ` : ''}${esc(L({ en: done + ' class' + (done > 1 ? 'es' : '') + ' done', bn: done + 'টি ক্লাস শেষ' }))}</p>`;
   return `<div class="t-card${suggested ? ' suggested' : ''}">
     <div class="t-head">${avatarHtml(t)}<div><h3>${esc(displayName(t))}</h3><small>${esc(t.cv?.profession || '')}${t.cv?.university ? ' · ' + esc(t.cv.university) : ''}</small></div></div>
     <p class="t-meta">${esc(t.cv?.education || '')} · ${esc(t.cv?.experience || '')}${t.cv?.speciality ? '<br>Speciality: ' + esc(t.cv.speciality) : ''}</p>
     ${matchNote}
+    ${statsLine}
     <div class="chips">${subjects.map(s => `<span class="chip">${esc(s)}</span>`).join('')}${teacherPricing[t.id].acceptsTime ? '<span class="chip time-ex">⏳ Accepts time exchange</span>' : ''}</div>
     ${t.cv?.available_time || t.cv?.expertise_time ? `<p class="t-meta">🕒 ${esc(t.cv.expertise_time || t.cv.available_time)}</p>` : ''}
     <div class="t-foot">${priceChip(t.cv)}${requestable ? `<button class="btn btn-primary btn-sm" onclick="requestTeacher(${t.id})">Request</button>` : ''}</div>
@@ -449,6 +511,54 @@ on('suggestBtn', 'onclick', async () => {
   } catch (e) { msg($('reqMsg'), e.message, false); }
   finally { btn.disabled = false; btn.textContent = old; }
 });
+/* ---------- form drafts (2.3): typed fields survive a sign-in
+   interruption or a session timeout — they live in localStorage and are
+   restored on load, and cleared only when the form is sent/saved. */
+const HELP_DRAFT_KEY = 'microedu_help_draft';
+const TEACHER_DRAFT_KEY = 'microedu_teacher_draft';
+const HELP_FIELDS = ['qLevel', 'qSubject', 'qChapter', 'qTopic', 'qHours', 'qTime', 'qStart'];
+const TEACHER_FIELDS = ['tEducation', 'tUniversity', 'tProfession', 'tPosition', 'tExperience', 'tSpeciality', 'tSubjects', 'tLevel', 'tAddress', 'tAvail', 'tRate', 'tExpTime'];
+function saveHelpDraft() {
+  if (!$('qSubject')) return;
+  try {
+    const v = {};
+    HELP_FIELDS.forEach(id => { const el = $(id); if (el) v[id] = el.value; });
+    localStorage.setItem(HELP_DRAFT_KEY, JSON.stringify(v));
+  } catch (e) { /* storage full/blocked: the form still works */ }
+}
+function restoreHelpDraft() {
+  if (!$('qSubject')) return;
+  try {
+    const d = JSON.parse(localStorage.getItem(HELP_DRAFT_KEY) || 'null');
+    if (!d) return;
+    HELP_FIELDS.forEach(id => { const el = $(id); if (el && d[id] !== undefined && d[id] !== null && d[id] !== '') el.value = d[id]; });
+  } catch (e) { /* bad draft: ignore */ }
+}
+function clearHelpDraft() { try { localStorage.removeItem(HELP_DRAFT_KEY); } catch (e) { /* ignore */ } }
+function saveTeacherDraft() {
+  if (!$('tEducation')) return;
+  try {
+    const v = {};
+    TEACHER_FIELDS.forEach(id => { const el = $(id); if (el) v[id] = el.value; });
+    v.tPricing = $('tPricing') ? $('tPricing').value : '';
+    v.tTimeEx = $('tTimeEx') ? $('tTimeEx').checked : false;
+    localStorage.setItem(TEACHER_DRAFT_KEY, JSON.stringify(v));
+  } catch (e) { /* storage full/blocked: the form still works */ }
+}
+function restoreTeacherDraft() {
+  if (!$('tEducation')) return;
+  try {
+    const d = JSON.parse(localStorage.getItem(TEACHER_DRAFT_KEY) || 'null');
+    if (!d) return;
+    TEACHER_FIELDS.forEach(id => { const el = $(id); if (el && d[id]) el.value = d[id]; });
+    if (d.tPricing && $('tPricing')) $('tPricing').value = d.tPricing;
+    if ($('tTimeEx')) $('tTimeEx').checked = !!d.tTimeEx;
+  } catch (e) { /* bad draft: ignore */ }
+}
+function clearTeacherDraft() { try { localStorage.removeItem(TEACHER_DRAFT_KEY); } catch (e) { /* ignore */ } }
+HELP_FIELDS.forEach(id => { const el = $(id); if (el) { el.addEventListener('input', saveHelpDraft); el.addEventListener('change', saveHelpDraft); } });
+[...TEACHER_FIELDS, 'tPricing', 'tTimeEx'].forEach(id => { const el = $(id); if (el) { el.addEventListener('input', saveTeacherDraft); el.addEventListener('change', saveTeacherDraft); } });
+
 /* ---------- the three ways to send a request (no open direct requests) ---------- */
 function helpPayload(teacher_id) {
   return { teacher_id, level: $('qLevel').value, subject: $('qSubject').value, chapter: $('qChapter').value, topic: $('qTopic').value, hours: $('qHours').value, available_time: $('qTime').value, class_start: $('qStart').value ? new Date($('qStart').value).toISOString() : null };
@@ -459,7 +569,7 @@ async function sendRequests(ids) {
   let sent = 0; let firstErr = '';
   for (const id of ids) { try { await api('/api/requests', { method: 'POST', body: JSON.stringify(helpPayload(id)) }); sent++; } catch (e) { if (!firstErr) firstErr = e.message; } }
   msg($('bulkMsg'), sent ? `✅ Request sent to ${sent} teacher(s). It is now in their dashboard — when a teacher accepts, you will see it in your dashboard and can confirm payment.` + (firstErr ? ` (${ids.length - sent} could not be sent: ${firstErr})` : '') : 'Could not send: ' + (firstErr || 'please sign in and try again.'), !!sent);
-  if (sent) loadMine();
+  if (sent) { clearHelpDraft(); loadMine(); }
 }
 window.sendToAll = () => sendRequests(suggestedIds);
 window.sendToTop = n => sendRequests(suggestedIds.slice(0, n));
@@ -488,6 +598,7 @@ window.requestTeacher = async id => {
     const d = await api('/api/requests', { method: 'POST', body: JSON.stringify(payload) });
     const paidNote = d.request.pay_with === 'time' ? `Paid with time credit (${fmtMins(Math.round((Number(d.request.hours) || 1) * 60))})` : `Amount: BDT ${d.request.amount_bdt}`;
     msg($('reqMsg'), `Request sent to microedu. GID: ${d.request.gid} · ${paidNote} · Status: Pending — microedu finalizes it from both sides, then your meeting is organized. The class link stays hidden; use the Join Class button at class time.`);
+    clearHelpDraft();
     loadMine();
   } catch (e) { msg($('reqMsg'), e.message, false); }
 };
@@ -526,6 +637,74 @@ const FLOW_STEPS = [
   { en: 'Session', bn: 'সেশন' },
   { en: 'Done & paid', bn: 'শেষ ও পেমেন্ট' },
 ];
+/* ---------- dashboard "do this now" banner (1.1) ----------
+   One banner for the most urgent active service, following the As
+   Student / As Teacher toggle. bannerState is pure except for the clock,
+   so it is unit-testable with sample requests. mode 'card' links to the
+   request card it names; mode 'join' opens the class directly. */
+function bannerState(r, teacher, nowMs) {
+  const now = nowMs || Date.now();
+  const isMoney = r.pay_with !== 'time' && Number(r.amount_bdt) > 0;
+  const start = r.class_start ? Date.parse(r.class_start) : NaN;
+  const open = isNaN(start) ? NaN : start - 15 * 60000;
+  const close = isNaN(start) ? NaN : start + ((Number(r.hours) || 1) * 60 + 30 + (r.extension_status === 'Approved' ? (Number(r.extension_minutes) || 0) : 0)) * 60000;
+  const inWindow = !isNaN(start) && now >= open && now <= close;
+  const gid = r.gid;
+  const card = { en: 'See the request →', bn: 'রিকোয়েস্টটি দেখুন →' };
+  if (!teacher) {
+    if (r.status === 'Pending' && r.teacher_response !== 'Accepted')
+      return { kind: 'waiting', gid, mode: 'card', action: card, text: { en: `Waiting — ${r.teacher_name || 'your teacher'} has not answered your ${r.subject} request yet.`, bn: `অপেক্ষা — ${r.teacher_name || 'আপনার শিক্ষক'} এখনো আপনার ${r.subject} রিকোয়েস্টের উত্তর দেননি।` } };
+    if (r.status === 'Pending' && isMoney && !r.trxid)
+      return { kind: 'pay', gid, mode: 'card', action: { en: 'Pay now →', bn: 'এখনই পেমেন্ট করুন →' }, text: { en: `Pay now — send BDT ${r.amount_bdt} by bKash for your ${r.subject} class, then submit the TrxID.`, bn: `এখনই পেমেন্ট করুন — ${r.subject} ক্লাসের জন্য bKash-এ ${r.amount_bdt} টাকা পাঠান, তারপর TrxID জমা দিন।` } };
+    if (['Pending', 'Confirm'].includes(r.status) && isMoney && r.trxid && !Number(r.verified))
+      return { kind: 'verifying', gid, mode: 'card', action: card, text: { en: 'Verifying — microedu checks the TrxID before the class. You will see Payment Confirmed here.', bn: 'যাচাই চলছে — ক্লাসের আগে microedu TrxID যাচাই করছে। এখানেই Payment Confirmed দেখতে পাবেন।' } };
+    if (r.status === 'Pending' && r.teacher_response === 'Accepted' && !isMoney)
+      return { kind: 'confirm', gid, mode: 'card', action: { en: 'Confirm it →', bn: 'নিশ্চিত করুন →' }, text: { en: `Your ${r.subject} class is free — tap Confirm Payment to confirm it.`, bn: `আপনার ${r.subject} ক্লাসটি ফ্রি — নিশ্চিত করতে Confirm Payment চাপুন।` } };
+    if (r.status === 'Confirm' && !isNaN(start)) {
+      if (inWindow) return { kind: 'join', gid, mode: 'join', action: { en: 'Join Class', bn: 'ক্লাসে যোগ দিন' }, text: { en: `Your ${r.subject} class is on now — join it.`, bn: `আপনার ${r.subject} ক্লাস এখন চলছে — যোগ দিন।` } };
+      if (now < open) return { kind: 'starts', gid, mode: 'card', action: { en: 'See the class →', bn: 'ক্লাসটি দেখুন →' }, text: { en: `Your ${r.subject} class starts ${timeUntil(r.class_start)}.`, bn: `আপনার ${r.subject} ক্লাস শুরু হবে ${timeUntil(r.class_start)}।` } };
+      return { kind: 'over', gid, mode: 'card', action: card, text: { en: `Your ${r.subject} class time is over — open the request to finish it, or ask microedu for a refund.`, bn: `আপনার ${r.subject} ক্লাসের সময় শেষ — রিকোয়েস্ট খুলে শেষ করুন, অথবা microedu-র কাছে টাকা ফেরত চান।` } };
+    }
+    if (r.status === 'Confirm')
+      return { kind: 'confirmed', gid, mode: 'card', action: card, text: { en: `Payment confirmed — your ${r.subject} class link will be ready at class time.`, bn: `পেমেন্ট নিশ্চিত — ${r.subject} ক্লাসের লিংক ক্লাসের সময় তৈরি হবে।` } };
+    if (r.status === 'Ongoing') {
+      if (inWindow) return { kind: 'join', gid, mode: 'join', action: { en: 'Join Class', bn: 'ক্লাসে যোগ দিন' }, text: { en: `Your ${r.subject} class is in progress — join it now.`, bn: `আপনার ${r.subject} ক্লাস চলছে — এখনই যোগ দিন।` } };
+      return { kind: 'ongoing', gid, mode: 'card', action: { en: 'Tap Done →', bn: 'Done চাপুন →' }, text: { en: `Your ${r.subject} class is in progress — tap Done when it finishes.`, bn: `আপনার ${r.subject} ক্লাস চলছে — শেষ হলে Done চাপুন।` } };
+    }
+    return null;
+  }
+  if (r.status === 'Pending' && r.teacher_response !== 'Accepted')
+    return { kind: 'answer', gid, mode: 'card', action: { en: 'Answer it →', bn: 'উত্তর দিন →' }, text: { en: `New request — ${r.student_name || 'a student'} wants help with ${r.subject}. Accept or decline it.`, bn: `নতুন রিকোয়েস্ট — ${r.student_name || 'একজন শিক্ষার্থী'} ${r.subject}-এ সাহায্য চান। রাজি হোন বা না করুন।` } };
+  if (r.status === 'Pending' && r.teacher_response === 'Accepted' && isMoney && !Number(r.verified))
+    return { kind: 'waitpay', gid, mode: 'card', action: card, text: { en: `Waiting for ${r.student_name || 'the student'} to pay for the ${r.subject} class.`, bn: `${r.student_name || 'শিক্ষার্থী'}-র ${r.subject} ক্লাসের পেমেন্টের অপেক্ষায় আছি।` } };
+  if (r.status === 'Pending' && r.teacher_response === 'Accepted')
+    return { kind: 'waitconfirm', gid, mode: 'card', action: card, text: { en: `Waiting for ${r.student_name || 'the student'} to confirm the ${r.subject} class.`, bn: `${r.student_name || 'শিক্ষার্থী'}-র ${r.subject} ক্লাস নিশ্চিত করার অপেক্ষায় আছি।` } };
+  if (r.status === 'Confirm' && !isNaN(start)) {
+    if (inWindow) return { kind: 'join', gid, mode: 'join', action: { en: 'Join Class', bn: 'ক্লাসে যোগ দিন' }, text: { en: `Your ${r.subject} class with ${r.student_name || 'your student'} is on now — join it.`, bn: `আপনার ${r.student_name || 'শিক্ষার্থী'}-র সঙ্গে ${r.subject} ক্লাস এখন চলছে — যোগ দিন।` } };
+    if (now < open) return { kind: 'starts', gid, mode: 'card', action: { en: 'See the class →', bn: 'ক্লাসটি দেখুন →' }, text: { en: `Your ${r.subject} class starts ${timeUntil(r.class_start)}.`, bn: `আপনার ${r.subject} ক্লাস শুরু হবে ${timeUntil(r.class_start)}।` } };
+    return { kind: 'over', gid, mode: 'card', action: card, text: { en: `Your ${r.subject} class time is over — the student will mark Done.`, bn: `আপনার ${r.subject} ক্লাসের সময় শেষ — শিক্ষার্থী Done চিহ্নিত করবেন।` } };
+  }
+  if (r.status === 'Confirm')
+    return { kind: 'confirmed', gid, mode: 'card', action: card, text: { en: `Payment received — your ${r.subject} class with ${r.student_name || 'your student'} is confirmed.`, bn: `পেমেন্ট পাওয়া গেছে — ${r.student_name || 'আপনার শিক্ষার্থী'}-র সঙ্গে ${r.subject} ক্লাস নিশ্চিত।` } };
+  if (r.status === 'Ongoing') {
+    if (inWindow) return { kind: 'join', gid, mode: 'join', action: { en: 'Join Class', bn: 'ক্লাসে যোগ দিন' }, text: { en: `Your ${r.subject} class is in progress — join it now.`, bn: `আপনার ${r.subject} ক্লাস চলছে — এখনই যোগ দিন।` } };
+    return { kind: 'ongoing', gid, mode: 'card', action: card, text: { en: `Your ${r.subject} class is in progress — the student marks Done when it finishes.`, bn: `আপনার ${r.subject} ক্লাস চলছে — শেষ হলে শিক্ষার্থী Done চিহ্নিত করবেন।` } };
+  }
+  return null;
+}
+function renderBanner(d) {
+  const bar = $('doNowBanner'); if (!bar) return;
+  const teacher = (localStorage.getItem('microedu_dash_view') || 'student') === 'teacher';
+  const list = d ? (teacher ? d.asTeacher : d.asStudent) || [] : [];
+  const active = list.filter(r => ['Pending', 'Confirm', 'Ongoing'].includes(r.status) && !(r.on_hold_until && new Date(r.on_hold_until) > new Date()));
+  const st = active.length ? bannerState(active[0], teacher) : null;
+  if (!st) { bar.classList.add('hidden'); bar.innerHTML = ''; return; }
+  const act = st.mode === 'join'
+    ? `<button class="btn btn-orange btn-sm" type="button" onclick="joinClass('${esc(st.gid)}')">${esc(L(st.action))}</button>`
+    : `<a class="btn btn-primary btn-sm" href="#req-${esc(st.gid)}" onclick="flashReq(event,'${esc(st.gid)}')">${esc(L(st.action))}</a>`;
+  bar.innerHTML = `<b>👉 ${esc(L(st.text))}</b> ${act}`;
+  bar.classList.remove('hidden');
+}
 let lastMineData = null;
 function flowStage(r) {
   if (r.status === 'Done') return 6;
@@ -542,7 +721,7 @@ function renderFlow(d) {
   const r = active[0];
   if (!r) { card.classList.add('hidden'); $('flowSteps').innerHTML = ''; setText('flowFor', ''); return; }
   const cur = flowStage(r);
-  const lang = localStorage.getItem('microedu_lang') === 'bn' ? 'bn' : 'en';
+  const lang = curLang();
   const who = teacher ? r.student_name : r.teacher_name;
   setText('flowFor', `GID: ${r.gid} · ${r.subject} — ${r.topic}` + (who ? ` · ${teacher ? 'Student' : 'Teacher'}: ${who}` : ''));
   const reqLink = `#req-${r.gid}`;
@@ -616,9 +795,13 @@ async function loadMine() {
          student can never be stuck without a way to pay. */
       if (mine === 'student' && resp === 'Accepted' && isMoney && !Number(r.verified) && ['Pending', 'Confirm'].includes(r.status)) {
         if (r.trxid && !r.rejected) {
-          payBox = `<div class="pay-box"><p>🧾 <b>bKash payment submitted</b> — TrxID: <b>${esc(r.trxid)}</b>${r.sender ? ' · From: ' + esc(r.sender) : ''}<br><span class="muted">microedu is verifying your payment. Once verified, the money is Held safely and your class is confirmed.</span></p></div>`;
+          payBox = `<div class="pay-box"><p>🧾 <b>${esc(L({ en: 'bKash payment submitted', bn: 'bKash পেমেন্ট জমা দেওয়া হয়েছে' }))}</b> — TrxID: <b>${esc(r.trxid)}</b>${r.sender ? ' · From: ' + esc(r.sender) : ''}<br><span class="muted">${esc(L({ en: 'Verifying — microedu checks the TrxID before the class. You will see Payment Confirmed here.', bn: 'যাচাই চলছে — ক্লাসের আগে microedu TrxID যাচাই করছে। এখানেই Payment Confirmed দেখতে পাবেন।' }))}</span></p></div>`;
         } else {
-          payBox = `<div class="pay-box"><p>💳 <b>Pay BDT ${r.amount_bdt} by bKash</b> to <b>01729-071571</b> (microedu), then enter your transaction ID:</p>${r.rejected ? '<p><span class="escrow refunded">❌ microedu could not verify the last TrxID — please check it and submit again.</span></p>' : ''}<p style="display:flex;gap:8px;flex-wrap:wrap"><input id="trx-${r.gid}" placeholder="bKash TrxID" style="flex:1;min-width:150px"><input id="snd-${r.gid}" placeholder="Your bKash number" style="flex:1;min-width:140px"><button class="btn btn-primary btn-sm" onclick="submitTrx('${r.gid}')">Submit TrxID</button></p></div>`;
+          /* Copy buttons beside the bKash number and the exact amount;
+             the sender number comes pre-filled from the member's own
+             profile and can still be edited (1.4). */
+          const senderVal = (me && (me.mobile || me.phone)) || '';
+          payBox = `<div class="pay-box"><p>💳 <b>${esc(L({ en: 'Pay BDT ' + r.amount_bdt + ' by bKash', bn: 'bKash-এ ' + r.amount_bdt + ' টাকা পাঠান' }))}</b> <button type="button" class="btn btn-ghost btn-sm" onclick="copyText('${r.amount_bdt}', this)">📋 ${esc(L({ en: 'Copy amount', bn: 'টাকার অংক কপি করুন' }))}</button><br>${esc(L({ en: 'To microedu: ', bn: 'microedu-র নম্বরে: ' }))}<b>01729-071571</b> <button type="button" class="btn btn-ghost btn-sm" onclick="copyText('01729-071571', this)">📋 ${esc(L({ en: 'Copy number', bn: 'নম্বর কপি করুন' }))}</button><br>${esc(L({ en: 'Then enter your transaction ID:', bn: 'তারপর আপনার লেনদেনের আইডি (TrxID) লিখুন:' }))}</p>${r.rejected ? '<p><span class="escrow refunded">❌ microedu could not verify the last TrxID — please check it and submit again.</span></p>' : ''}<p style="display:flex;gap:8px;flex-wrap:wrap"><input id="trx-${r.gid}" placeholder="bKash TrxID" style="flex:1;min-width:150px"><input id="snd-${r.gid}" data-sender-input placeholder="${esc(L({ en: 'Your bKash number', bn: 'আপনার bKash নম্বর' }))}" value="${esc(senderVal)}" style="flex:1;min-width:140px"><button class="btn btn-primary btn-sm" onclick="submitTrx('${r.gid}')">Submit TrxID</button></p></div>`;
         }
       }
       if (r.status === 'Confirm' && (!isMoney || Number(r.verified))) btns.push(`<button class="btn btn-primary btn-sm" onclick="advance('${r.gid}','Ongoing')">Start (Ongoing)</button>`);
@@ -626,18 +809,32 @@ async function loadMine() {
       if (['Confirm', 'Ongoing'].includes(r.status) && (!isMoney || Number(r.verified) || r.status === 'Ongoing')) btns.push(`<button class="btn btn-orange btn-sm" onclick="joinClass('${r.gid}')">Join Class</button>`);
       if (['Confirm', 'Ongoing'].includes(r.status) && r.extension_status !== 'Requested') btns.push(`<button class="btn btn-ghost btn-sm" onclick="extendReq('${r.gid}')">Request +30 min</button>`);
       if (mine === 'student' && r.escrow_status === 'Held' && r.status !== 'Done') btns.push(`<button class="btn btn-ghost btn-sm" onclick="refundReq('${r.gid}')">Problem? Refund to me</button>`);
+      /* One-tap rating after Done (2.2): stars right on the request card
+         — tap a rating, one optional line, submit once. A rating already
+         given shows instead, and can be changed by tapping again below. */
+      let rateBox = '';
+      if (mine === 'student' && r.status === 'Done') {
+        if (r.my_rating) {
+          rateBox = `<div class="rate-box"><p class="muted">${esc(L({ en: 'You rated this class', bn: 'আপনি এই ক্লাসটি রেট করেছেন' }))} ${'★'.repeat(Number(r.my_rating))}${'☆'.repeat(5 - Number(r.my_rating))}${r.my_rating_comment ? ' — “' + esc(r.my_rating_comment) + '”' : ''}</p></div>`;
+        } else {
+          rateBox = `<div class="rate-box"><p><b>${esc(L({ en: 'How was this class? Tap a star:', bn: 'ক্লাসটি কেমন ছিল? একটি স্টার চাপুন:' }))}</b></p><div class="stars" id="rate-${esc(r.gid)}">${[1, 2, 3, 4, 5].map(v => `<span data-v="${v}" onclick="rateStars('${esc(r.gid)}', ${v})">★</span>`).join('')}</div><p style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><input id="rate-comment-${esc(r.gid)}" placeholder="${esc(L({ en: 'One line (optional)', bn: 'এক লাইন (ঐচ্ছিক)' }))}" style="flex:1;min-width:150px"><button class="btn btn-primary btn-sm" onclick="submitRating('${esc(r.gid)}')">${esc(L({ en: 'Submit rating', bn: 'রেটিং জমা দিন' }))}</button></p></div>`;
+        }
+      }
       const who = mine === 'teacher' ? `<br>👤 From: <b>${esc(r.student_name || 'A student')}</b>` : `<br>👤 Teacher: <b>${esc(r.teacher_name || '')}</b>`;
       const details = [r.level, r.chapter].filter(Boolean).map(x => esc(x)).join(' · ');
       const sent = r.created_at ? `<br>🕐 Sent: ${esc(fmtWhen(r.created_at))}` : '';
       const when = (r.class_start ? `<br>🗓️ Class: ${esc(new Date(r.class_start).toLocaleString())} · <b>${esc(timeUntil(r.class_start))}</b>` : '') + (r.available_time ? `<br>🕒 Available: ${esc(r.available_time)}` : '');
       const ext = r.extension_status === 'Requested' ? '<p class="muted">⏳ Extension requested — waiting for microedu</p>' : r.extension_status === 'Approved' ? `<p class="muted">✅ Extra ${r.extension_minutes} min approved by microedu</p>` : '';
-      return `<div class="req-card" id="req-${esc(r.gid)}"><p><b>GID: ${esc(r.gid)}</b> · ${esc(r.subject)} — ${esc(r.topic)}${details ? `<br>${details}` : ''}<br>${r.hours} hr × BDT ${r.rate_bdt_per_hour} = <b>BDT ${r.amount_bdt}</b>${who}${sent}${when}</p>${tracker(r)}${respLine}${holdLine}<p>${escrowLine(r)}</p>${ext}${payBox}${btns.length ? `<p style="display:flex;gap:8px;flex-wrap:wrap">${btns.join('')}</p>` : ''}</div>`;
+      return `<div class="req-card" id="req-${esc(r.gid)}"><p><b>GID: ${esc(r.gid)}</b> · ${esc(r.subject)} — ${esc(r.topic)}${details ? `<br>${details}` : ''}<br>${r.hours} hr × BDT ${r.rate_bdt_per_hour} = <b>BDT ${r.amount_bdt}</b>${who}${sent}${when}</p>${tracker(r)}${respLine}${holdLine}<p>${escrowLine(r)}</p>${ext}${payBox}${rateBox}${btns.length ? `<p style="display:flex;gap:8px;flex-wrap:wrap">${btns.join('')}</p>` : ''}</div>`;
     };
     setHtml('myRequests', d.asStudent.filter(r => !(r.status === 'Pending' && r.on_hold_until && new Date(r.on_hold_until) > new Date())).map(r => render(r, 'student')).join('') || '<p class="muted">None yet</p>');
     setHtml('teacherReqs', d.asTeacher.map(r => render(r, 'teacher')).join('') || '<p class="muted">None yet</p>');
     lastMineData = d;
     applyDashView();
     renderFlow(d);
+    renderBanner(d);
+    prefillSenderInputs();
+    loadMyRating();
     const goGid = sessionStorage.getItem('microedu_goto');
     if (goGid) { sessionStorage.removeItem('microedu_goto'); setTimeout(() => goToReq(null, goGid), 350); }
     loadWallet();
@@ -657,6 +854,7 @@ function applyDashView() {
   /* The flow card follows the view: the active service as a student is
      a different booking from the active service as a teacher. */
   renderFlow(lastMineData);
+  renderBanner(lastMineData);
 }
 window.setDashView = v => { localStorage.setItem('microedu_dash_view', v); applyDashView(); };
 on('viewStudent', 'onclick', () => setDashView('student'));
@@ -771,16 +969,67 @@ on('wBtn', 'onclick', async () => { try { const d = await api('/api/wallet/withd
 document.querySelectorAll('#fStars span').forEach(s => s.onclick = () => { myRanking = Number(s.dataset.v); document.querySelectorAll('#fStars span').forEach(x => x.classList.toggle('on', Number(x.dataset.v) <= myRanking)); });
 on('fBtn', 'onclick', async () => { try { await api('/api/feedback', { method: 'POST', body: JSON.stringify({ gid: $('fGid').value, comment: $('fComment').value, ranking: myRanking, complain: $('fComplain').value }) }); msg($('fMsg'), 'Feedback saved'); } catch (e) { msg($('fMsg'), e.message, false); } });
 
+/* ---------- one-tap rating on the request card (2.2) ---------- */
+const pendingRatings = {};
+window.rateStars = (gid, v) => {
+  pendingRatings[gid] = v;
+  document.querySelectorAll('#rate-' + gid + ' span').forEach(x => x.classList.toggle('on', Number(x.dataset.v) <= v));
+};
+window.submitRating = async gid => {
+  const v = pendingRatings[gid];
+  if (!v) return alert(L({ en: 'Tap a star first (1 to 5).', bn: 'আগে একটি স্টার চাপুন (১ থেকে ৫)।' }));
+  const comment = (($('rate-comment-' + gid) || {}).value || '').trim();
+  try {
+    await api('/api/feedback', { method: 'POST', body: JSON.stringify({ gid, ranking: v, comment: comment || null }) });
+    delete pendingRatings[gid];
+    alert(L({ en: 'Thank you! Your rating was saved.', bn: 'ধন্যবাদ! আপনার রেটিং সেভ হয়েছে।' }));
+    loadMine();
+  } catch (e) { alert(e.message); }
+};
+/* A teacher's own completed classes + average stars (2.2), shown under
+   the As Teacher view. */
+async function loadMyRating() {
+  if (!token) return;
+  try {
+    const d = await api('/api/my-rating');
+    const el = $('myRatingLine'); if (!el) return;
+    if (!d.completed && !d.rating_count) {
+      el.textContent = L({ en: 'No completed class yet — your first rating will show here.', bn: 'এখনো কোনো ক্লাস শেষ হয়নি — আপনার প্রথম রেটিং এখানে দেখা যাবে।' });
+      return;
+    }
+    el.textContent = L({
+      en: `Your teaching so far: ${d.completed} class${d.completed === 1 ? '' : 'es'} done` + (d.rating_avg ? ` · ⭐ ${d.rating_avg} average (${d.rating_count} rating${d.rating_count > 1 ? 's' : ''})` : ' · no ratings yet'),
+      bn: `আপনার পড়ানো: ${d.completed}টি ক্লাস শেষ` + (d.rating_avg ? ` · ⭐ গড় ${d.rating_avg} (${d.rating_count}টি রেটিং)` : ' · এখনো কোনো রেটিং নেই'),
+    });
+  } catch (e) { /* not signed in */ }
+}
+
 /* ---------- people & stats ---------- */
+async function loadStats() {
+  /* Home page counters (1.2): public counts only, so they fill reliably
+     for signed-out visitors too. If the fetch fails, the stats band is
+     hidden rather than showing dashes that never fill. */
+  try {
+    const d = await api('/api/stats');
+    setText('statTeachers', d.counts.teachers);
+    setText('statStudents', d.counts.members);
+    setText('statTotal', d.counts.time_teachers);
+  } catch (e) {
+    const band = document.querySelector('.stats');
+    if (band) band.style.display = 'none';
+  }
+}
 async function loadPeople() {
   try {
     const d = await api('/api/people');
     setText('peopleCounts', `Total members: ${d.total} · Teachers: ${d.counts.teachers} · Teach for time exchange: ${d.counts.time_teachers}`);
-    setText('statTeachers', d.counts.teachers);
-    setText('statStudents', d.total);
-    setText('statTotal', d.counts.time_teachers);
     setHtml('peopleBody', d.people.map(p => `<tr><td>${p.id}</td><td>${p.cv && Number(p.cv.teacher_ready || 0) ? '👩‍🏫 Teacher' : 'Member'}</td><td>${!p.anonymous && p.photo_data ? `<img class="thumb" src="${p.photo_data}" alt=""> ` : ''}${esc(displayName(p))}</td><td>${esc(p.email || '—')}</td><td>${esc(p.cv?.education || '')}</td><td>${esc(p.cv?.university || '')}</td><td>${esc(p.cv?.profession || '')}</td><td>${esc(p.cv?.experience || '')}</td><td>${p.subscription ? esc(p.subscription.plan) + ' (' + esc(p.subscription.status) + ')' : ''}</td></tr>`).join(''));
-  } catch (e) { /* table stays as-is */ }
+    hideEl('peopleSignin'); hideEl('peopleCard', false);
+  } catch (e) {
+    /* Signed out: the list stays hidden behind a sign-in prompt
+       (Decision A) instead of an empty table. */
+    if ($('peopleBody')) { hideEl('peopleCard'); hideEl('peopleSignin', false); }
+  }
 }
 on('refreshPeople', 'onclick', loadPeople);
 
@@ -818,11 +1067,14 @@ async function updateHeaderUser() {
     refreshBellBadge();
   } catch (e) { /* stale token: leave the default bar */ }
 }
-function loadAll() { loadTeachers(); loadPeople(); loadMine(); restoreSession(); updateHeaderUser(); loadBranches(); initHelpParams(); }
+function loadAll() { loadTeachers(); loadPeople(); loadStats(); loadMine(); restoreSession(); updateHeaderUser(); loadBranches(); restoreHelpDraft(); initHelpParams(); }
 /* "I Need Help" needs an identified member: without sign-in there is no
    way to know who is asking, so the help page sends the visitor to the
-   sign-in page first and brings them back here after signing in. */
+   sign-in page first and brings them back here after signing in. The
+   typed form is saved as a draft first, so nothing is lost. */
 if ($('suggestBtn') && !token) {
+  saveHelpDraft();
+  setReturnTo(location.pathname + location.search);
   sessionStorage.setItem('microedu_after_login', 'help');
   location.replace('dashboard');
 }
@@ -873,7 +1125,7 @@ const BN = {
   phTime: 'আজ সন্ধ্যা ৭টা', estTotal: 'আনুমানিক মোট:', estNote: '(চূড়ান্ত মূল্য নির্ভর করবে আপনার শিক্ষকের নিজের রেটের ওপর)',
   teachersTitle: 'আমাদের শিক্ষকগণ', myReqTitle: 'আমার রিকোয়েস্টসমূহ',
   statsTitle: 'বাংলাদেশে বাড়তে থাকা একটি শিক্ষা কমিউনিটি',
-  statTeachers: 'নিবন্ধিত শিক্ষক', statStudents: 'নিবন্ধিত সদস্য', statTotal: 'সময়ের বদলে শেখান', statRate: 'টাকা/ঘণ্টা থেকে শুরু',
+  statTeachers: 'নিবন্ধিত শিক্ষক', statStudents: 'নিবন্ধিত সদস্য', statTotal: 'সময়ের বদলে শেখান', statRate: 'শিক্ষকরা নিজের রেট নিজে ঠিক করেন — কেউ কেউ ফ্রি পড়ান',
   whyEyebrow: '— কেন microedu.com', whyTitle: 'আসল শিক্ষক, আসল <span class="u-line">সিভি</span>, আসল ক্লাস।',
   whySub: 'প্রতিটি সদস্য বিস্তারিত সিভি দিয়ে রেজিস্টার করেন — শিক্ষা, বিশ্ববিদ্যালয়, অভিজ্ঞতা, বিশেষ দক্ষতা ও বিষয়। শিক্ষকের কার্ডে যা দেখবেন, ঠিক সেটাই তিনি রেজিস্টার করেছেন।',
   tick1: 'প্রতিটি শিক্ষকের প্রোফাইলের পেছনে বিস্তারিত সিভি',
@@ -968,6 +1220,32 @@ const BN = {
   footExplore: 'ঘুরে দেখুন', regLink: 'রেজিস্ট্রেশন', footKnow: 'জেনে রাখুন',
   know1: '💳 bKash-এ আগাম পেমেন্ট', know2: '🛡️ সমস্যা হলে সম্পূর্ণ টাকা ফেরত', know3: '📍 ঢাকা, বাংলাদেশ', know4: '🕒 আপনার ফ্রি সময়ে সাপোর্ট',
   footCopy: '© ২০২৬ microedu.com — মাইক্রো এডু. সাপোর্ট', footTag: 'একই অ্যাকাউন্টে শিখুন ও পড়ান',
+  /* User-friendliness plan (25 Nov 2026): FAQ, footer contact, chips,
+     wallet / time-bank labels, sign-in note, people sign-in prompt. */
+  navFaq: 'সাধারণ প্রশ্নোত্তর',
+  footContact: '📞 +8801729071571 (ফোন ও WhatsApp) · ✉️ data2decision20@gmail.com',
+  helpChipsLabel: 'একটি বিষয় চাপুন — অথবা নিজে লিখুন:',
+  helpExample: 'উদাহরণ: নবম শ্রেণি গণিত, অধ্যায় ৫, বীজগণিত — সামনে পরীক্ষা',
+  helpWaiting: 'শিক্ষকরা সাধারণত কয়েক ঘণ্টার মধ্যে উত্তর দেন। microedu দুই পক্ষ থেকে ক্লাস ফাইনাল করে দেয়।',
+  signInNote: 'একটি অ্যাকাউন্টেই শেখা ও পড়ানো — একবার সাইন ইন করুন, তারপর ড্যাশবোর্ড থেকে শিখুন বা পড়ান।',
+  walletNote: 'Held = ক্লাস Done না হওয়া পর্যন্ত microedu টাকা নিরাপদে রাখছে। Released = শিক্ষককে দেওয়া হয়েছে। Refunded = শিক্ষার্থীকে ফেরত দেওয়া হয়েছে।',
+  timeBankNote2: 'টাইম ক্রেডিট: ১ ঘণ্টা ফ্রি ক্লাস = ৬০ মিনিট আয়। শুধু যেসব শিক্ষক টাইম এক্সচেঞ্জে রাজি, তাদের কাছে এই ক্রেডিট খরচ করা যায়।',
+  peopleSigninTitle: 'নিবন্ধিত সদস্য দেখতে সাইন ইন করুন',
+  peopleSigninNote: 'সদস্য তালিকা শুধু সাইন ইন করা সদস্যদের জন্য। সাইন ইন করুন — অথবা এক মিনিটে ফ্রি রেজিস্টার করুন — তারপর এখানেই ফিরে আসবেন।',
+  faqTitle: 'সাধারণ প্রশ্নোত্তর',
+  faqSub: 'সদস্যরা সবচেয়ে বেশি যা জিজ্ঞেস করেন, তার সহজ উত্তর। তবুও আটকে গেলে microedu-র সঙ্গে যোগাযোগ করুন — নম্বর ও ইমেইল নিচে ফুটারে আছে।',
+  faqQ1: 'টাকা ফেরত পাব কীভাবে?',
+  faqA1: 'ক্লাসে কোনো সমস্যা হলে, ক্লাস Done চিহ্নিত হওয়ার আগেই microedu-কে জানান — পুরো টাকা ফেরত পাবেন। আপনার পেমেন্ট ক্লাস Done না হওয়া পর্যন্ত microedu-র কাছে নিরাপদে জমা (Held) থাকে, তাই ফেরত দেওয়ার টাকা সেখানেই আছে। Done হয়ে গেলে টাকা শিক্ষককে দেওয়া হয়, তখন আর ফেরত হয় না। <a href="activity">পুরো কার্যক্রমের ধারা দেখুন →</a>',
+  faqQ2: 'শিক্ষক রিকোয়েস্ট না করলে কী হবে?',
+  faqA2: 'বুকিং বাতিল হবে, আর আপনাকে সঙ্গে সঙ্গে জানানো হবে। সাজেশন থেকে অন্য শিক্ষক বেছে নিন, অথবা নতুন রিকোয়েস্ট পাঠান — microedu দুই পক্ষ থেকে ক্লাস ফাইনাল করে দেবে। <a href="activity">পুরো কার্যক্রমের ধারা দেখুন →</a>',
+  faqQ3: 'ক্লাস চলাকালীন সমস্যা হলে কী করব?',
+  faqA3: 'ক্লাস Done চিহ্নিত হওয়ার আগেই microedu-কে জানান: পেমেন্ট তখনো জমা আছে, তাই পুরো টাকা ফেরত পাবেন, আর ওই সাহায্যের অন্য শিক্ষকরা সঙ্গে সঙ্গে আবার পাওয়া যাবে। ক্লাস শেষ হয়ে Done হয়ে গেলেও জানান — আমরা দেখব।',
+  faqQ4: 'টাইম ব্যাংক কীভাবে কাজ করে?',
+  faqA4: 'ফ্রি ক্লাস পড়ালেই টাইম ক্রেডিট আয় হয়: ১ ঘণ্টা = ৬০ মিনিট। এই ক্রেডিট দিয়ে যেসব শিক্ষক টাইম এক্সচেঞ্জে রাজি, তাদের কাছে শিখতে পারবেন। টাকার ক্লাস সবসময় bKash-এ দিতে হয়, টাইম ক্রেডিট দিয়ে নয়।',
+  faqQ5: 'microedu-তে কীভাবে পড়াব?',
+  faqA5: 'একবার রেজিস্টার করুন — শেখা ও পড়ানোর জন্য একটাই অ্যাকাউন্ট — তারপর ড্যাশবোর্ড থেকে আপনার পুরো শিক্ষক প্রোফাইল সম্পূর্ণ করুন; প্রতিটি CV ঘর পূরণ করা বাধ্যতামূলক। সেভ হলেই I Need Help সাজেশনের মাধ্যমে শিক্ষার্থীরা আপনাকে খুঁজে পাবে। নিজের রেট নিজে ঠিক করুন: ঘণ্টা হিসেবে, বিডিংয়ে, অথবা সম্পূর্ণ ফ্রি — দামের কোনো সিলিং নেই।',
+  faqQ6: 'microedu-র সঙ্গে যোগাযোগ করব কীভাবে?',
+  faqA6: 'ফোন বা WhatsApp করুন +8801729071571 নম্বরে, অথবা ইমেইল করুন data2decision20@gmail.com-এ। প্রতিটি রিকোয়েস্ট microedu দুই পক্ষ থেকে ফাইনাল করে মিটিংয়ের ব্যবস্থা করে — সাইটে সরাসরি মেসেজ করার কোনো ব্যবস্থা নেই।',
 };
 const i18nOriginals = [];
 function captureOriginals() {
@@ -991,4 +1269,6 @@ function applyLang(lang) {
 captureOriginals();
 $('langEn').onclick = () => applyLang('en');
 $('langBn').onclick = () => applyLang('bn');
-if (localStorage.getItem('microedu_lang') === 'bn') applyLang('bn');
+/* Default language (Decision B): remember the visitor's last choice;
+   with no choice stored, open in Bangla first. */
+applyLang(localStorage.getItem('microedu_lang') === 'en' ? 'en' : 'bn');

@@ -10,6 +10,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/styles.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0e7c86">
+<link rel="apple-touch-icon" href="/icon-180.png">
 </head>
 <body>
 
@@ -45,13 +48,18 @@
     <div class="wrap">
       <p class="eyebrow center" data-i18n="peopleEyebrow">— Community</p>
       <h2 class="center" data-i18n-html="peopleTitle">Registered <span class="u-line">people</span>.</h2>
-      <div class="card">
+      <div class="card" id="peopleCard">
         <p id="peopleCounts" class="counts"></p>
         <div class="table-scroll"><table>
           <thead><tr><th data-i18n="thId">ID</th><th data-i18n="thRole">Type</th><th data-i18n="thName">Name</th><th data-i18n="thEmail">Email</th><th data-i18n="thEducation">Education</th><th data-i18n="thUniversity">University</th><th data-i18n="thProfession">Profession</th><th data-i18n="thExperience">Experience</th><th data-i18n="thSubscription">Subscription</th></tr></thead>
           <tbody id="peopleBody"></tbody>
         </table></div>
         <p><button class="btn btn-ghost btn-sm" id="refreshPeople" data-i18n="refreshBtn">Refresh</button></p>
+      </div>
+      <div class="card hidden" id="peopleSignin">
+        <h3 data-i18n="peopleSigninTitle">Please sign in to see registered people</h3>
+        <p class="muted" data-i18n="peopleSigninNote">The member list is for signed-in members only. Sign in — or register free in one minute — and you will come back here.</p>
+        <p><a class="btn btn-primary" href="dashboard" onclick="setReturnTo('/teachers')">Sign In →</a> <a class="btn btn-ghost" href="register">Join Free</a></p>
       </div>
     </div>
   </section>
@@ -70,6 +78,7 @@
       <a href="plans" data-i18n="navSub">Subscription</a>
       <a href="register" data-i18n="regLink">Registration</a>
       <a href="teachers#people" data-i18n="navPeople">Registered People</a>
+      <a href="faq" data-i18n="navFaq">FAQ — Common questions</a>
     </div>
     <div class="foot-col">
       <h4 data-i18n="footKnow">Good to know</h4>
@@ -77,6 +86,7 @@
       <p data-i18n="know2">🛡️ Full refund if there is a problem</p>
       <p data-i18n="know3">📍 Dhaka, Bangladesh</p>
       <p data-i18n="know4">🕒 Support at your available time</p>
+      <p data-i18n="footContact">📞 +8801729071571 (phone &amp; WhatsApp) · ✉️ data2decision20@gmail.com</p>
     </div>
   </div>
   <div class="foot-bar wrap"><span data-i18n="footCopy">© 2026 microedu.com — Micro Edu. Support</span><span data-i18n="footTag">Learn and teach from the same account</span></div>

@@ -71,6 +71,24 @@ function auth(req) { const t = (req.headers.authorization||'').replace('Bearer '
 /* Stored notifications: they stay in the member's bell panel until the
    member deletes them — nothing here is recomputed or resurrected. */
 function notify(personId, text, gid) { try { db.prepare('INSERT INTO notifications(person_id,text,gid) VALUES(?,?,?)').run(personId, text, gid || null); } catch { /* a notification must never block the main action */ } }
+/* ---------- email alerts (2.1) ----------
+   The local dev server never sends real mail — it logs the alert
+   instead. The live Worker sends through the Cloudflare Email Sending
+   binding (see cloudflare/worker.js + docs/EMAIL_SETUP.md). */
+const SITE_URL = 'https://d2dmicroedu-com.du-naimul2024.workers.dev';
+function mailTo(personId, subject, text) {
+  const p = db.prepare('SELECT email FROM registered_people WHERE id=?').get(personId);
+  if (!p || !p.email) return false;
+  console.log('[email-alert] to ' + p.email + ' | ' + subject + ' | ' + text);
+  return true;
+}
+/* Completed classes + average stars for a teacher (1.5): from the
+   requests they finished and the feedback left on those classes. */
+const teacherStats = teacherId => {
+  const c = db.prepare("SELECT COUNT(*) n FROM tuition_requests WHERE teacher_id=? AND status='Done'").get(teacherId);
+  const r = db.prepare("SELECT AVG(f.ranking) avg, COUNT(f.ranking) n FROM feedback_evaluation f JOIN tuition_requests t ON t.gid=f.gid WHERE t.teacher_id=? AND f.ranking IS NOT NULL").get(teacherId);
+  return { completed: c ? c.n : 0, rating_avg: r && r.avg !== null ? Math.round(Number(r.avg) * 10) / 10 : null, rating_count: r ? r.n : 0 };
+};
 const pub = p => p && ({ id:p.id, role:p.role, name:p.name, email:p.email, phone:p.phone, mobile:p.mobile, picture:p.picture, created_at:p.created_at, photo_data:p.photo_data||null, photo_mode:p.photo_mode||'personal', group_name:p.group_name||null });
 /* Public view: anonymous members are masked — no name, contacts or photo. */
 const pubPublic = p => { const v = pub(p); if (!v) return v; if (v.photo_mode==='anonymous') return {...v, name:'Anonymous', email:null, phone:null, mobile:null, picture:null, photo_data:null, group_name:null, anonymous:true}; return v; };
@@ -236,7 +254,18 @@ const routes = {
       .run(name, b.phone !== undefined ? (b.phone||null) : me.phone, b.mobile !== undefined ? (b.mobile||null) : me.mobile, photoData, photoMode, photoMode === 'group' ? (b.group_name||null) : null, me.id);
     send(res,200,{person:pub(db.prepare('SELECT * FROM registered_people WHERE id=?').get(me.id)), cv:cvOf(me.id)});
   },
+  /* Public counts only — no names, emails or phones (1.2). The home page
+     counters read this, so they work for signed-out visitors too. */
+  'GET /api/stats': (req,res) => {
+    const t = db.prepare('SELECT COUNT(*) c FROM cv_details WHERE teacher_ready=1').get();
+    const tt = db.prepare('SELECT COUNT(*) c FROM cv_details WHERE teacher_ready=1 AND accepts_time_exchange=1').get();
+    const m = db.prepare('SELECT COUNT(*) c FROM registered_people').get();
+    send(res,200,{counts:{teachers: t?t.c:0, members: m?m.c:0, time_teachers: tt?tt.c:0}});
+  },
+  /* Registered People list (Decision A): signed-in members only. The
+     full member rows (names, emails, phones) are no longer public. */
   'GET /api/people': (req,res) => {
+    const me = auth(req); if (!me) return send(res,401,{error:'Sign in required'});
     const people = db.prepare('SELECT * FROM registered_people ORDER BY id').all().map(p => ({...pubPublic(p), cv:cvOf(p.id), subscription: db.prepare("SELECT * FROM subscriptions WHERE person_id=? ORDER BY id DESC LIMIT 1").get(p.id)||null }));
     const teachersCount = db.prepare('SELECT COUNT(*) c FROM cv_details WHERE teacher_ready=1').get().c;
     const timeTeachers = db.prepare('SELECT COUNT(*) c FROM cv_details WHERE teacher_ready=1 AND accepts_time_exchange=1').get().c;
@@ -244,7 +273,7 @@ const routes = {
     send(res,200,{counts, total:people.length, people});
   },
   'GET /api/teachers': (req,res) => {
-    const teachers = db.prepare('SELECT p.* FROM registered_people p JOIN cv_details c ON c.person_id=p.id WHERE c.teacher_ready=1 ORDER BY p.id').all().map(p => ({...pubPublic(p), cv:cvOf(p.id)}));
+    const teachers = db.prepare('SELECT p.* FROM registered_people p JOIN cv_details c ON c.person_id=p.id WHERE c.teacher_ready=1 ORDER BY p.id').all().map(p => ({...pubPublic(p), cv:cvOf(p.id), ...teacherStats(p.id)}));
     send(res,200,{teachers});
   },
   'POST /api/subscriptions': async (req,res) => {
@@ -292,6 +321,10 @@ const routes = {
       .run(g,me.id,t.id,b.level||null,b.subject,b.chapter||null,b.topic,hours,rate,amount,b.available_time||null,link,b.class_start||null,payWith);
     db.prepare('INSERT INTO payments(gid,person_id,amount_bdt,status) VALUES(?,?,?,\'Pending\')').run(g,me.id,amount);
     notify(t.id, '📩 New request from ' + me.name + ' — ' + b.subject + ' · ' + b.topic, g);
+    /* Email alert (2.1): new request → the teacher. On this dev server
+       it only logs; the live Worker sends it (see worker.js). */
+    mailTo(t.id, 'New request on microedu.com — ' + b.subject,
+      'Hi ' + (t.name || 'teacher') + ',\n\n' + me.name + ' asked for help with ' + b.subject + ' — ' + b.topic + ' (' + hours + ' hour' + (hours > 1 ? 's' : '') + ').\n\nSign in to accept or decline it:\n' + SITE_URL + '/dashboard\n\n— microedu.com');
     send(res,201,{request: stripLink(db.prepare('SELECT * FROM tuition_requests WHERE id=?').get(Number(info.lastInsertRowid)))});
   },
   /* bKash advance payment: student submits the TrxID; microedu (admin)
@@ -335,6 +368,11 @@ const routes = {
     if (b.ok) {
       notify(r.student_id, '✅ Your payment was verified — your class with ' + (teaV ? teaV.name : 'your teacher') + ' is confirmed (' + r.subject + ').', r.gid);
       notify(r.teacher_id, '✅ Payment verified for your class with ' + (stuV ? stuV.name : 'your student') + ' (' + r.subject + ').', r.gid);
+      /* Email alert (2.1): payment verified → student + teacher. */
+      mailTo(r.student_id, 'Payment verified — your microedu class is confirmed',
+        'Hi ' + (stuV ? stuV.name : '') + ',\n\nYour payment for ' + r.subject + ' — ' + r.topic + ' was verified. Your class with ' + (teaV ? teaV.name : 'your teacher') + ' is confirmed.\n\nSee it in your dashboard:\n' + SITE_URL + '/dashboard#myReqCard\n\n— microedu.com');
+      mailTo(r.teacher_id, 'Payment verified for your microedu class',
+        'Hi ' + (teaV ? teaV.name : '') + ',\n\nPayment was verified for your class with ' + (stuV ? stuV.name : 'your student') + ' (' + r.subject + ' — ' + r.topic + '). The money is held safely with microedu until the class is Done.\n\nSee it in your dashboard:\n' + SITE_URL + '/dashboard#reqToMeCard\n\n— microedu.com');
     } else {
       notify(r.student_id, '⚠️ Your bKash payment could not be verified — please check the TrxID and submit again (' + r.subject + ').', r.gid);
     }
@@ -394,6 +432,13 @@ const routes = {
     notify(r.student_id, b.response === 'Accepted'
       ? '✅ ' + me.name + ' accepted your request — ' + r.subject + ' · ' + r.topic + '. You can now pay in My Requests.'
       : '❌ ' + me.name + ' declined your request — ' + r.subject + ' · ' + r.topic + '.', r.gid);
+    /* Email alert (2.1): teacher accepts → the student. (A decline is
+       bell-only — the student picks another teacher from the dashboard.) */
+    if (b.response === 'Accepted') {
+      const stu = db.prepare('SELECT name FROM registered_people WHERE id=?').get(r.student_id);
+      mailTo(r.student_id, me.name + ' accepted your microedu request — ' + r.subject,
+        'Hi ' + (stu ? stu.name : '') + ',\n\n' + me.name + ' accepted your request for ' + r.subject + ' — ' + r.topic + '. You can now pay in My Requests.\n\nSign in to pay:\n' + SITE_URL + '/dashboard#myReqCard\n\n— microedu.com');
+    }
     send(res,200,{request: stripLink(db.prepare('SELECT * FROM tuition_requests WHERE gid=?').get(r.gid))});
   },
   /* Secure join: link returned only to this booking's own student/teacher,
@@ -510,11 +555,27 @@ const routes = {
     db.prepare('DELETE FROM notifications WHERE person_id=?').run(me.id);
     send(res,200,{ok:true});
   },
+  /* One rating per member per class (2.2): rating the same class again
+     replaces the earlier rating instead of adding a second row, so the
+     averages in 1.5 stay honest. */
   'POST /api/feedback': async (req,res) => {
     const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
     const b = await body(req);
-    const info = db.prepare('INSERT INTO feedback_evaluation(person_id,gid,comment,ranking,complain) VALUES(?,?,?,?,?)').run(me.id,b.gid||null,b.comment||null,b.ranking?Number(b.ranking):null,b.complain||null);
+    const ranking = b.ranking ? Number(b.ranking) : null;
+    if (ranking !== null && (ranking < 1 || ranking > 5)) return send(res,400,{error:'Ranking must be 1 to 5 stars'});
+    const existing = b.gid ? db.prepare('SELECT * FROM feedback_evaluation WHERE person_id=? AND gid=?').get(me.id, b.gid) : null;
+    if (existing) {
+      db.prepare('UPDATE feedback_evaluation SET comment=?, ranking=?, complain=? WHERE id=?').run(b.comment||null, ranking, b.complain||null, existing.id);
+      return send(res,200,{feedback: db.prepare('SELECT * FROM feedback_evaluation WHERE id=?').get(existing.id)});
+    }
+    const info = db.prepare('INSERT INTO feedback_evaluation(person_id,gid,comment,ranking,complain) VALUES(?,?,?,?,?)').run(me.id,b.gid||null,b.comment||null,ranking,b.complain||null);
     send(res,201,{feedback: db.prepare('SELECT * FROM feedback_evaluation WHERE id=?').get(Number(info.lastInsertRowid))});
+  },
+  /* A teacher's own completed classes + average stars (2.2), shown under
+     the As Teacher view in the dashboard. */
+  'GET /api/my-rating': (req,res) => {
+    const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
+    send(res,200,teacherStats(me.id));
   },
   /* No member-to-member messaging by design: learners send a request to
      microedu, microedu finalizes it from both sides, and only then is the
@@ -533,7 +594,7 @@ const routes = {
       const matched = words.filter(w => hay.includes(w));
       let score = matched.length;
       if (level && (cv.level||'').toLowerCase().includes(level)) score += 2;
-      return {...pubPublic(p), cv, match_score: score, matched};
+      return {...pubPublic(p), cv, match_score: score, matched, ...teacherStats(p.id)};
     });
     scored.sort((a,b) => b.match_score - a.match_score || (Number(a.cv.rate_bdt_per_hour)||0) - (Number(b.cv.rate_bdt_per_hour)||0));
     send(res,200,{teachers: scored.slice(0,6)});
@@ -545,12 +606,12 @@ const routes = {
   },
   'GET /api/my-requests': (req,res) => {
     const me = auth(req); if(!me) return send(res,401,{error:'Sign in required'});
-    const enrich = rows => rows.map(r => { const pay = db.prepare('SELECT escrow_status, status, trxid, sender, verified, rejected FROM payments WHERE gid=? ORDER BY id DESC LIMIT 1').get(r.gid); const sn = db.prepare('SELECT name, photo_mode FROM registered_people WHERE id=?').get(r.student_id); const tn = db.prepare('SELECT name, photo_mode FROM registered_people WHERE id=?').get(r.teacher_id); const shownName = (row, pid, label) => (!row ? null : (row.photo_mode==='anonymous' && me.id!==pid && me.id!==1 ? label : row.name)); return {...stripLink(r), escrow_status: pay ? pay.escrow_status : 'Awaiting payment', pay_status: pay ? pay.status : null, trxid: pay ? pay.trxid : null, sender: pay ? pay.sender : null, verified: pay ? pay.verified : 0, rejected: pay ? pay.rejected : 0, student_name: shownName(sn, r.student_id, 'Anonymous student'), teacher_name: shownName(tn, r.teacher_id, 'Anonymous teacher')}; });
+    const enrich = rows => rows.map(r => { const pay = db.prepare('SELECT escrow_status, status, trxid, sender, verified, rejected FROM payments WHERE gid=? ORDER BY id DESC LIMIT 1').get(r.gid); const sn = db.prepare('SELECT name, photo_mode FROM registered_people WHERE id=?').get(r.student_id); const tn = db.prepare('SELECT name, photo_mode FROM registered_people WHERE id=?').get(r.teacher_id); const shownName = (row, pid, label) => (!row ? null : (row.photo_mode==='anonymous' && me.id!==pid && me.id!==1 ? label : row.name)); const fb = db.prepare('SELECT ranking, comment FROM feedback_evaluation WHERE person_id=? AND gid=? ORDER BY id DESC LIMIT 1').get(me.id, r.gid); return {...stripLink(r), escrow_status: pay ? pay.escrow_status : 'Awaiting payment', pay_status: pay ? pay.status : null, trxid: pay ? pay.trxid : null, sender: pay ? pay.sender : null, verified: pay ? pay.verified : 0, rejected: pay ? pay.rejected : 0, student_name: shownName(sn, r.student_id, 'Anonymous student'), teacher_name: shownName(tn, r.teacher_id, 'Anonymous teacher'), my_rating: fb ? fb.ranking : null, my_rating_comment: fb ? fb.comment : null}; });
     send(res,200,{asStudent: enrich(db.prepare('SELECT * FROM tuition_requests WHERE student_id=? ORDER BY id DESC').all(me.id)), asTeacher: enrich(db.prepare('SELECT * FROM tuition_requests WHERE teacher_id=? ORDER BY id DESC').all(me.id))});
   },
 };
 
-const MIME = {'.html':'text/html','.css':'text/css','.js':'text/javascript','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.svg':'image/svg+xml'};
+const MIME = {'.html':'text/html','.css':'text/css','.js':'text/javascript','.json':'application/manifest+json','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.svg':'image/svg+xml'};
 const server = http.createServer(async (req,res) => {
   const url = new URL(req.url, 'http://localhost');
   const key = req.method + ' ' + url.pathname;
